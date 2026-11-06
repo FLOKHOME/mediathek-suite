@@ -171,6 +171,7 @@ def search(query, lang="de"):
                 "subtitle": (it.get("subtitle") or "").strip(),
                 "desc": (it.get("shortDescription") or "").strip()[:120],
                 "kind": ((it.get("kind") or {}).get("label") or "").strip(),
+                "duration": it.get("duration"),
                 "url": f"https://www.arte.tv/{lang}/videos/{pid}/",
             })
         if new == 0:

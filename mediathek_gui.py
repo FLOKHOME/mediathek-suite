@@ -67,7 +67,7 @@ def detect_url_source(text):
 
 
 def do_search(source, query):
-    """Sucht in einer Quelle; liefert (label, token, url)-Tupel."""
+    """Sucht in einer Quelle; liefert (label, token, url, duration_min)."""
     mod = get_source_module(source)
     out = []
     if source == "ARTE":
@@ -77,7 +77,8 @@ def do_search(source, query):
                 label += f" – {r['subtitle']}"
             if r["kind"]:
                 label += f"  [{r['kind']}]"
-            out.append((label, r["id"], r["url"]))
+            dmin = round(r["duration"] / 60) if r.get("duration") else None
+            out.append((label, r["id"], r["url"], dmin))
     elif source == "Netzkino":
         for r in mod.search(query):
             label = r.get("title") or r.get("originalTitle") or "?"
@@ -85,11 +86,10 @@ def do_search(source, query):
                 label += f" [orig: {r['originalTitle']}]"
             if r.get("productionYear"):
                 label += f" ({r['productionYear']})"
-            if r.get("runtimeInSeconds"):
-                label += f" {round(r['runtimeInSeconds']/60)} Min"
             if r.get("hasDrm"):
                 label += "  [DRM-Flag]"
-            out.append((label, r["slug"], r["slug"]))
+            out.append((label, r["slug"], r["slug"],
+                        r.get("duration_min")))
     elif source == "3sat":
         for r in mod.search(query):
             label = r["title"]
@@ -97,22 +97,52 @@ def do_search(source, query):
                 label += f"  [{r['category']}]"
             if r["availability"]:
                 label += f"  ({r['availability']})"
-            out.append((label, r["url"], r["url"]))
+            out.append((label, r["url"], r["url"], r.get("duration_min")))
     elif source == "ARD":
         for r in mod.search(query):
             label = r["title"]
-            if r["duration"]:
-                label += f"  [{r['duration']}]"
             if r["meta"]:
                 label += f"  ({r['meta']})"
-            out.append((label, r["url"], r["url"]))
+            out.append((label, r["url"], r["url"], r.get("duration_min")))
     else:  # ZDF
         for r in mod.search(query):
             label = r["title"]
             if r["content_type"]:
                 label += f"  [{r['content_type']}]"
-            out.append((label, r["url"], r["url"]))
+            out.append((label, r["url"], r["url"], r.get("duration_min")))
     return out
+
+
+LENGTH_FILTERS = {
+    "Alle": None,
+    "Filme (ab 45 Min)": (45, None),
+    "Mittel (15–45 Min)": (15, 45),
+    "Kurz (unter 15 Min)": (None, 15),
+}
+
+
+def apply_filters(rows, source_filter, length_filter):
+    """Filtert Ergebniszeilen; liefert (sichtbare, Anzahl_ohne_Länge)."""
+    rng = LENGTH_FILTERS.get(length_filter)
+    out, hidden_unknown = [], 0
+    for r in rows:
+        if source_filter != "Alle" and r["source"] != source_filter:
+            continue
+        if rng:
+            lo, hi = rng
+            dm = r["duration_min"]
+            if dm is None:
+                if r["source"] == "Netzkino":
+                    dm = 999        # Netzkino enthält nur Spielfilme
+                else:
+                    hidden_unknown += 1
+                    continue
+            if lo is not None and dm < lo:
+                continue
+            if hi is not None and dm > hi:
+                continue
+        out.append(r)
+    return out, hidden_unknown
 
 
 class _GuiLogger:
@@ -306,6 +336,23 @@ def selftest():
     assert res[0] == ("Maximal", 1080)
     assert len([x for x in res if x[1] == 1080]) == 2
     print(f"  {res}")
+    print("[selftest] Filter ...")
+    rows = [
+        {"source": "ARTE", "label": "Film A", "duration_min": 96},
+        {"source": "3sat", "label": "Clip B", "duration_min": 5},
+        {"source": "ARD", "label": "Doku C", "duration_min": 30},
+        {"source": "Netzkino", "label": "Spielfilm D", "duration_min": None},
+    ]
+    out, hidden = apply_filters(rows, "Alle", "Alle")
+    assert len(out) == 4 and hidden == 0
+    out, hidden = apply_filters(rows, "Netzkino", "Alle")
+    assert len(out) == 1
+    out, hidden = apply_filters(rows, "Alle", "Filme (ab 45 Min)")
+    assert [r["label"] for r in out] == ["Film A", "Spielfilm D"]
+    assert hidden == 0          # Netzkino ohne Laufzeit zählt als Spielfilm
+    out, hidden = apply_filters(rows, "Alle", "Kurz (unter 15 Min)")
+    assert [r["label"] for r in out] == ["Clip B"]
+    print("  Anbieter- und Längenfilter OK")
     print("[selftest] Download-Optionen bauen ...")
     null_hook = lambda d: None  # noqa: E731
     url, opts, info = prepare("ARTE", "133122-000-A", Path("/tmp"), 1080,
@@ -358,6 +405,9 @@ def run_gui():
                                                   str(default_out)))
     subs_var = tk.StringVar(value="Automatisch")
     res_var = tk.StringVar()
+    src_filter = tk.StringVar(value="Alle")
+    len_filter = tk.StringVar(value="Alle")
+    all_rows = []          # alle Treffer: {source, label, dur_text, token, duration_min}
 
     # ---- Kopf: Zielordner
     top = ttk.Frame(root, padding=8)
@@ -379,16 +429,34 @@ def run_gui():
     ttk.Button(srow, text="Suchen", command=lambda: on_search()
                ).pack(side="right")
 
+    # ---- Filter
+    frow = ttk.Frame(root, padding=(8, 0, 8, 2))
+    frow.pack(fill="x")
+    ttk.Label(frow, text="Anbieter:").pack(side="left")
+    src_box = ttk.Combobox(frow, textvariable=src_filter, state="readonly",
+                           width=10, values=("Alle",) + SOURCES)
+    src_box.current(0)
+    src_box.pack(side="left", padx=4)
+    ttk.Label(frow, text="Länge:").pack(side="left", padx=(12, 2))
+    len_box = ttk.Combobox(frow, textvariable=len_filter, state="readonly",
+                           width=20, values=tuple(LENGTH_FILTERS))
+    len_box.current(0)
+    len_box.pack(side="left", padx=4)
+    src_box.bind("<<ComboboxSelected>>", lambda _e: redraw_results())
+    len_box.bind("<<ComboboxSelected>>", lambda _e: redraw_results())
+    ttk.Label(frow, text="Ziel: MKV · Untertitel/Metadaten/Cover eingebettet"
+              ).pack(side="right")
+
     # ---- Trefferliste
-    tree = ttk.Treeview(root, columns=("quelle", "titel", "extra", "token"),
+    tree = ttk.Treeview(root, columns=("quelle", "titel", "laenge", "token"),
                         show="headings", height=8)
     tree.heading("quelle", text="Quelle")
     tree.heading("titel", text="Titel")
-    tree.heading("extra", text="Zusatz")
+    tree.heading("laenge", text="Länge")
     tree.heading("token", text="ID / URL")
     tree.column("quelle", width=85, anchor="center")
     tree.column("titel", width=430)
-    tree.column("extra", width=230)
+    tree.column("laenge", width=110, anchor="center")
     tree.column("token", width=180)
     tree.pack(fill="both", expand=True, padx=8, pady=2)
 
@@ -448,6 +516,7 @@ def run_gui():
         if not text:
             q.put(("error", "Bitte Suchbegriff oder URL eingeben."))
             return
+        all_rows.clear()
         if re.match(r"https?://", text):
             source, token = detect_url_source(text)
             if not source:
@@ -455,13 +524,13 @@ def run_gui():
                                 "(arte.tv, netzkino.de, 3sat.de, "
                                 "ardmediathek.de, zdf.de)."))
                 return
-            tree.delete(*tree.get_children())
-            tree.insert("", "end", values=(source, "URL direkt eingegeben",
-                                           "", token))
+            all_rows.append({"source": source, "label": "URL direkt "
+                             "eingegeben", "dur_text": "Länge ?",
+                             "token": token, "duration_min": None})
+            redraw_results()
             q.put(("status", f"{source}: URL erkannt — 'Details laden' oder "
                              "direkt 'Herunterladen'."))
             return
-        tree.delete(*tree.get_children())
         q.put(("status", "Suche in 5 Quellen gleichzeitig ..."))
         for src in SOURCES:
             def work(s=src):
@@ -540,6 +609,21 @@ def run_gui():
                 q.put(("error", f"Download fehlgeschlagen: {err}"))
         threading.Thread(target=work, daemon=True).start()
 
+    def redraw_results():
+        tree.delete(*tree.get_children())
+        out, hidden = apply_filters(all_rows, src_filter.get(),
+                                    len_filter.get())
+        for r in out:
+            tree.insert("", "end", values=(r["source"], r["label"],
+                                           r["dur_text"], r["token"]))
+        if hidden:
+            q.put(("status", f"{len(out)} von {len(all_rows)} Treffern "
+                             f"angezeigt ({hidden} ohne Längenangabe "
+                             "ausgeblendet)."))
+        else:
+            q.put(("status", f"{len(out)} von {len(all_rows)} Treffern "
+                             "angezeigt."))
+
     def pump():
         try:
             while True:
@@ -547,11 +631,15 @@ def run_gui():
                 kind = item[0]
                 if kind == "results_src":
                     _, source, results = item
-                    for label, token, url in results:
-                        tree.insert("", "end",
-                                    values=(source, label, "", token))
+                    for label, token, url, dmin in results:
+                        all_rows.append({
+                            "source": source, "label": label,
+                            "dur_text": (f"{dmin} Min." if dmin
+                                         else "Länge ?"),
+                            "token": token, "duration_min": dmin,
+                        })
+                    redraw_results()
                     append_log(f"[{source}] {len(results)} Treffer")
-                    q.put(("status", f"{source}: {len(results)} Treffer."))
                 elif kind == "source_error":
                     _, source, err = item
                     append_log(f"[{source}] Suche fehlgeschlagen: {err}")

@@ -139,6 +139,7 @@ def search(query):
             "category": html.unescape(cat.group("cat")).strip() if cat else "",
             "availability": html.unescape(avail.group("avail")).strip()
                             if avail else "",
+            "duration_min": None,
         })
     return results
 

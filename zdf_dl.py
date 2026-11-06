@@ -150,10 +150,26 @@ def search(query):
             if not url or "/video/" not in url or url in seen:
                 continue
             seen.add(url)
+            def _find_duration(o):
+                if isinstance(o, dict):
+                    for k, v in o.items():
+                        if k == "duration" and isinstance(v, (int, float)):
+                            return v
+                        r = _find_duration(v)
+                        if r is not None:
+                            return r
+                elif isinstance(o, list):
+                    for v in o:
+                        r = _find_duration(v)
+                        if r is not None:
+                            return r
+                return None
+            dsec = _find_duration(it)
             results.append({
                 "url": url,
                 "title": (it.get("title") or "").strip(),
                 "content_type": it.get("contentType") or "",
+                "duration_min": round(dsec / 60) if dsec else None,
                 "availability": (it.get("availability") or "") if
                 isinstance(it.get("availability"), str) else "",
             })

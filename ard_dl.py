@@ -92,16 +92,25 @@ def search(query):
         window = page[m.end():m.end() + 3000]
         toks = [p.strip() for p in re.sub(r"<[^>]+>", "|", window).split("|")
                 if p.strip()]
-        dur, t_idx = "", 0
-        for i, t in enumerate(toks):
-            if t in ("Min.", "Std.", "Sek.") and i > 0 \
-                    and re.fullmatch(r"\d+", toks[i - 1]):
-                dur, t_idx = f"{toks[i - 1]} {t}", i + 1
-                break
+        dur, dur_min, t_idx = "", None, 0
+        i = 0
+        while i < len(toks) - 1:
+            if re.fullmatch(r"\d+", toks[i]) and \
+                    toks[i + 1] in ("Min.", "Std.", "Sek."):
+                val, unit = int(toks[i]), toks[i + 1]
+                dur += (", " if dur else "") + f"{val} {unit}"
+                dur_min = (dur_min or 0) + (
+                    val if unit == "Min."
+                    else val * 60 if unit == "Std."
+                    else max(1, val // 60))
+                i += 2
+                t_idx = i
+                continue
+            i += 1
         title = toks[t_idx] if t_idx < len(toks) else path
-        meta = next((t for t in toks[t_idx + 1:] if "∙" in t), "")
+        meta = next((t for t in toks[t_idx:] if "∙" in t), "")
         results.append({"url": url, "title": title, "duration": dur,
-                        "meta": meta})
+                        "duration_min": dur_min, "meta": meta})
     return results
 
 

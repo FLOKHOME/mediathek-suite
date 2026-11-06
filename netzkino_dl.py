@@ -145,7 +145,11 @@ def search(query):
       nodes { slug title originalTitle productionYear runtimeInSeconds
               hasDrm isActive }
     } }""", {"q": query})
-    return data.get("allCmsMovies", {}).get("nodes", [])
+    nodes = data.get("allCmsMovies", {}).get("nodes", [])
+    for n in nodes:                     # Dauer in Minuten für GUI-Filter
+        rt = n.get("runtimeInSeconds")
+        n["duration_min"] = round(rt / 60) if rt else None
+    return nodes
 
 
 # --------------------------------------------------------------- Qualität
