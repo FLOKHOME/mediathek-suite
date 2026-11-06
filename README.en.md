@@ -2,14 +2,15 @@
 
 *[Deutsch](README.md) | English*
 
-**ARTE · Netzkino · 3sat in one app:** search, select, download — always
-**maximum quality as MKV** (subtitles, metadata and cover art embedded
-where available).
+**One search across all mediatheks — one download button.**
+Sources: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek**.
+Downloads always as **MKV** in the selected quality (subtitles, metadata
+and cover art embedded where available).
 
-The three command-line downloaders ([arte-dl](https://github.com/FLOKHOME/arte-dl),
+The command-line modules ([arte-dl](https://github.com/FLOKHOME/arte-dl),
 [netzkino-dl](https://github.com/FLOKHOME/netzkino-dl),
 [3sat-dl](https://github.com/FLOKHOME/3sat-dl)) are embedded as modules —
-the GUI calls them directly.
+plus ard_dl and zdf_dl for ARD and ZDF.
 
 ## Windows EXE (no installation)
 
@@ -23,40 +24,40 @@ Grab the latest `mediathek-suite-windows.exe` from the
 
 ## Usage
 
-1. Pick the **tab** of the source (ARTE / Netzkino / 3sat).
-2. Enter a search term → **Suchen** (search). Results show titles,
-   categories and remaining availability (3sat) / DRM flags (Netzkino).
-3. Select a hit → **Info anzeigen** (formats, languages, subtitles) or
-   **Herunterladen** (download) right away.
-4. Choose the target folder at the top (persisted, default:
-   `Videos\Mediathek\<source>`); quality 720p/1080p/Max, subtitles
-   automatic/all/none.
+1. **Enter a search term or URL** → "Suchen" searches **all 5 sources at
+   once**; results appear as they arrive, tagged with their source.
+   A pasted URL is auto-matched to its source (arte.tv, netzkino.de,
+   3sat.de, ardmediathek.de, zdf.de).
+2. Select a hit → **Details laden**: a readable panel with title,
+   description, duration, audio tracks, subtitles — and the list of
+   **actually available resolutions** (with bitrate).
+3. **Choose the resolution** (best is preselected) → download.
+   Target folder at the top (persisted, default:
+   `Videos\Mediathek\<source>`), subtitles automatic/all/none.
 
 ## Features per source
 
-| Source | Search | Special | Output |
-|---|---|---|---|
-| ARTE | API (emac v4) | German audio, subtitles de/all | MKV |
-| Netzkino | GraphQL | bitrate probing (max), DRM/clear-asset check | MKV |
-| 3sat | server-rendered page | embedded de subtitles, remaining time | MKV |
+| Source | Search | Special |
+|---|---|---|
+| ARTE | emac-v4 API | German audio, subtitles de/all |
+| Netzkino | GraphQL | bitrate probing (max), DRM/clear-asset check, size estimate |
+| 3sat | server-rendered page | embedded de subtitles, remaining time |
+| ARD | server-rendered search page | HLS up to 1080p |
+| ZDF | GraphQL (persisted query, token from page) | 1080p/6.6 Mbit, de subtitles |
 
 ## Command line
 
-The CLIs remain usable separately:
+The five modules remain usable as CLIs (each `search`, `info`, `dl`);
+suite check:
 
 ```bash
 python mediathek_gui.py --selftest      # headless check of all searches
 ```
 
-## How it works
+## Requirements (script usage only)
 
-- The GUI builds the same yt-dlp options as the CLIs (format sort
-  `res,tbr`, TV-Ton preference, MKV remux,
-  `FFmpegVideoRemuxer`/`FFmpegSubtitlesConvertor`/`FFmpegEmbedSubtitle`/
-  `FFmpegMetadata`/`EmbedThumbnail`) and downloads in a background thread
-  with a progress bar.
-- Requirements (script usage only): Python 3 with tkinter, ffmpeg on
-  PATH; yt-dlp is auto-fetched from PyPI.
+- Python 3 with tkinter, **ffmpeg** on PATH
+- yt-dlp is auto-fetched from PyPI
 
 ## Disclaimer
 

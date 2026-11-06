@@ -2,14 +2,15 @@
 
 *Deutsch | [English](README.en.md)*
 
-**ARTE · Netzkino · 3sat in einem Programm:** suchen, auswählen,
-herunterladen — immer **maximale Qualität als MKV** (Untertitel, Metadaten
-und Cover werden eingebettet, wo vorhanden).
+**Eine Suche über alle Mediatheken — ein Download-Knopf.**
+Quellen: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek**.
+Download immer in der gewählten Qualität als **MKV** (Untertitel,
+Metadaten und Cover werden eingebettet, wo vorhanden).
 
-Die drei Kommandozeilen-Downloader ([arte-dl](https://github.com/FLOKHOME/arte-dl),
+Die Kommandozeilen-Module ([arte-dl](https://github.com/FLOKHOME/arte-dl),
 [netzkino-dl](https://github.com/FLOKHOME/netzkino-dl),
 [3sat-dl](https://github.com/FLOKHOME/3sat-dl)) stecken als Module in
-dieser Suite — die GUI ruft sie direkt auf.
+dieser Suite — dazu ard_dl und zdf_dl für ARD und ZDF.
 
 ## Windows-EXE (ohne Installation)
 
@@ -24,40 +25,40 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 
 ## Bedienung
 
-1. **Tab** der Quelle wählen (ARTE / Netzkino / 3sat).
-2. Suchbegriff eingeben → **Suchen**. Die Trefferliste zeigt Titel,
-   Rubrik und Restzeit (3sat) bzw. DRM-Hinweise (Netzkino).
-3. Treffer markieren → **Info anzeigen** (Formate, Sprachen, Untertitel)
-   oder direkt **Herunterladen**.
-4. Zielordner oben wählbar (wird gespeichert, Standard:
-   `Videos\Mediathek\<Quelle>`); Qualität 720p/1080p/Max, Untertitel
-   automatisch/alle/keine.
+1. **Suchbegriff oder URL eingeben** → „Suchen" durchsucht **gleichzeitig
+   alle 5 Quellen**; die Treffer erscheinen sofort, mit Quellen-Spalte.
+   Eine eingefügte URL wird automatisch der passenden Quelle zugeordnet
+   (arte.tv, netzkino.de, 3sat.de, ardmediathek.de, zdf.de).
+2. Treffer markieren → **Details laden**: lesbares Fenster mit Titel,
+   Beschreibung, Dauer, Tonspuren, Untertiteln — und der Liste der
+   **tatsächlich verfügbaren Auflösungen** (mit Bitrate).
+3. **Auflösung wählen** (beste ist vorausgewählt) → **Herunterladen**.
+   Zielordner oben wählbar (wird gespeichert, Standard:
+   `Videos\Mediathek\<Quelle>`), Untertitel automatisch/alle/keine.
 
 ## Features pro Quelle
 
-| Quelle | Suche | Besonderheit | Ziel |
-|---|---|---|---|
-| ARTE | API (emac v4) | Tonspur Deutsch, Untertitel de/all | MKV |
-| Netzkino | GraphQL | Bitraten-Probe (max.), DRM-/Klartext-Prüfung | MKV |
-| 3sat | Server-rendered Seite | de-Untertitel eingebettet, Restzeit | MKV |
+| Quelle | Suche | Besonderheit |
+|---|---|---|
+| ARTE | emac-v4-API | Tonspur Deutsch, Untertitel de/all |
+| Netzkino | GraphQL | Bitraten-Probe (max.), DRM-/Klartext-Prüfung, Größenvorhersage |
+| 3sat | Server-rendered Seite | de-Untertitel eingebettet, Restzeit |
+| ARD | Server-rendered Suchseite | HLS bis 1080p |
+| ZDF | GraphQL (persistierte Query, Token aus der Seite) | 1080p/6,6 Mbit, de-Untertitel |
 
 ## Kommandozeile
 
-Die CLIs bleiben separat nutzbar:
+Die CLIs der fünf Module bleiben einzeln nutzbar (jeweils
+`search "begriff"`, `info <url>`, `dl <url>`); Suite-Prüfung:
 
 ```bash
 python mediathek_gui.py --selftest      # Headless-Prüfung aller Suchen
 ```
 
-## Wie es funktioniert
+## Voraussetzungen (nur Skript-Nutzung)
 
-- Die GUI baut für jede Quelle dieselben yt-dlp-Optionen wie die CLIs
-  (Format `res,tbr`-Sortierung, TV-Ton-Präferenz, MKV-Remux,
-  `FFmpegVideoRemuxer`/`FFmpegSubtitlesConvertor`/`FFmpegEmbedSubtitle`/
-  `FFmpegMetadata`/`EmbedThumbnail`) und führt den Download in einem
-  Hintergrundthread mit Fortschrittsanzeige aus.
-- Voraussetzungen (nur Skriptnutzung): Python 3 mit tkinter, ffmpeg im
-  PATH; yt-dlp wird automatisch von PyPI geladen.
+- Python 3 mit tkinter, **ffmpeg** im PATH
+- yt-dlp wird automatisch von PyPI geladen (`~/arte-dl/lib`)
 
 ## Haftungshinweis
 
