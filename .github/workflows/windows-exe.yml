@@ -71,6 +71,8 @@ jobs:
       - name: EXE bauen (PyInstaller onefile, windowed, yt-dlp + ffmpeg)
         run: pyinstaller --onefile --windowed --name ${{ matrix.out_name }}
           --collect-all yt_dlp --collect-all certifi
+          --hidden-import arte_dl --hidden-import netzkino_dl
+          --hidden-import 3sat_dl
           --add-binary "${{ matrix.addbin }}" mediathek_gui.py
 
       - name: Artefakt hochladen

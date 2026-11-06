@@ -33,6 +33,8 @@ SOURCES = ("ARTE", "Netzkino", "3sat")
 
 # --------------------------------------------------------------- Engine
 def get_source_module(name):
+    # importlib (3sat_dl beginnt mit Ziffer → kein normales `import`),
+    # die Module werden per --hidden-import in die EXE gebaut (s. Workflow)
     return importlib.import_module(
         {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl"}[name])
 
