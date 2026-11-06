@@ -1,0 +1,9 @@
+dist/
+build/
+*.spec
+__pycache__/
+*.pyc
+lib/
+lib/**
+ffmpeg/
+mediathek-suite-crash.log

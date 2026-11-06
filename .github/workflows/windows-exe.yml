@@ -1,0 +1,86 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: mediathek-suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip
+            ffmpeg_layout: zip
+            addbin: "ffmpeg/*;."
+            out_name: mediathek-suite-windows
+          - os: ubuntu-latest
+            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz
+            ffmpeg_layout: tar
+            addbin: "ffmpeg/*:."
+            out_name: mediathek-suite-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: yt-dlp + PyInstaller installieren
+        run: pip install "yt-dlp[default]" pyinstaller
+
+      - name: Headless-Selftest (Suchen + Optionsbau)
+        run: python mediathek_gui.py --selftest
+
+      - name: ffmpeg herunterladen (mit ins Paket)
+        run: |
+          mkdir ffmpeg
+          curl -L -o ffmpeg-pkg "${{ matrix.ffmpeg_url }}"
+
+      - name: ffmpeg entpacken (Windows)
+        if: matrix.ffmpeg_layout == 'zip'
+        shell: pwsh
+        run: |
+          Copy-Item ffmpeg-pkg ffmpeg-pkg.zip
+          Expand-Archive ffmpeg-pkg.zip -DestinationPath ffmpegtmp
+          Get-ChildItem -Recurse -Filter "ffmpeg.exe" ffmpegtmp |
+            Move-Item -Destination ffmpeg
+          Get-ChildItem -Recurse -Filter "ffprobe.exe" ffmpegtmp |
+            Move-Item -Destination ffmpeg
+          Remove-Item -Recurse -Force ffmpegtmp, ffmpeg-pkg, ffmpeg-pkg.zip
+          Get-ChildItem ffmpeg
+          if (-not (Test-Path ffmpeg/ffprobe.exe)) { exit 1 }
+
+      - name: ffmpeg entpacken (Linux)
+        if: matrix.ffmpeg_layout == 'tar'
+        run: |
+          mkdir -p /tmp/fmf && tar xJf ffmpeg-pkg -C /tmp/fmf
+          mv /tmp/fmf/*/bin/ffmpeg /tmp/fmf/*/bin/ffprobe ffmpeg/
+          rm -rf /tmp/fmf ffmpeg-pkg
+          ls -la ffmpeg/
+          test -f ffmpeg/ffprobe
+
+      - name: EXE bauen (PyInstaller onefile, windowed, yt-dlp + ffmpeg)
+        run: pyinstaller --onefile --windowed --name ${{ matrix.out_name }}
+          --collect-all yt_dlp --collect-all certifi
+          --add-binary "${{ matrix.addbin }}" mediathek_gui.py
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out_name }}
+          path: dist/${{ matrix.out_name }}*
+
+      - name: Release erstellen (nur bei v-Tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.out_name }}*
