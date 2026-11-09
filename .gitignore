@@ -7,3 +7,4 @@ lib/
 lib/**
 ffmpeg/
 mediathek-suite-crash.log
+deno

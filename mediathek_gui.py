@@ -22,6 +22,7 @@ import queue
 import re
 import sys
 import threading
+import time
 import traceback
 import urllib.parse
 from pathlib import Path
@@ -633,8 +634,14 @@ def run_gui():
 
         def work():
             try:
+                started = time.time()
                 run_download(source, token, out_dir, max_h, subs, False,
                              q, hook)
+                if source == "YouTube":
+                    import yt_dl
+                    mkv = yt_dl.find_newest_mkv(out_dir, started)
+                    if mkv:
+                        yt_dl.fix_dual_audio(mkv)
                 q.put(("progress", 1.0))
                 q.put(("status", f"[{source}] Fertig → {out_dir}"))
             except SystemExit as err:    # sys.exit-Fehler der Module

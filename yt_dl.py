@@ -22,6 +22,7 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+import time
 import zipfile
 from pathlib import Path
 
@@ -31,6 +32,8 @@ HOME = Path.home()
 LIB_DIR = HOME / "arte-dl" / "lib"
 DEFAULT_OUT = HOME / "Videos" / "YouTube"
 FROZEN = bool(getattr(sys, "frozen", False))
+APP_DIR = (Path(__file__).resolve().parent if not FROZEN
+           else Path(sys.executable).resolve().parent)
 
 
 # --------------------------------------------------------------- yt-dlp laden
@@ -134,17 +137,81 @@ def info(url):
 
 
 # --------------------------------------------------------------- Download
+def find_deno():
+    """Deno-Binary suchen (für YouTube-JS-Aufgaben) — exe-Bundle oder PATH."""
+    import shutil
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", ""))
+        if meipass:
+            candidates += [meipass / "deno.exe", meipass / "deno"]
+    candidates += [APP_DIR / "deno.exe", APP_DIR / "deno",
+                   LIB_DIR / "deno.exe", LIB_DIR / "deno"]
+    for c in candidates:
+        if c.is_file():
+            return str(c)
+    return shutil.which("deno")
+
+
+def find_newest_mkv(out_dir, since):
+    candidates = [p for p in Path(out_dir).glob("*.mkv")
+                  if p.stat().st_mtime >= since - 1]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def fix_dual_audio(path):
+    """MKV-Tonspuren: Spur 1 = Deutsch (default), Spur 2 = Original (eng).
+    Nur bei ≥2 Tonspuren aktiv; idempotent."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=index:stream_tags=language",
+             "-of", "json", str(path)],
+            check=True, capture_output=True, text=True).stdout
+        streams = json.loads(out).get("streams") or []
+    except Exception:  # noqa: BLE001
+        return None
+    if len(streams) < 2:
+        return None                     # nur eine Tonspur → nichts zu tun
+    tags = [(s.get("tags") or {}).get("language") for s in streams]
+    if tags[0] == "ger" and tags[1] == "eng":
+        return path                     # schon korrekt
+    tmp = path.with_name(path.stem + ".fixup.mkv")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(path), "-map", "0", "-c", "copy",
+         "-metadata:s:a:0", "language=ger", "-disposition:a:0", "default",
+         "-metadata:s:a:1", "language=eng", "-disposition:a:1", "0",
+         str(tmp)],
+        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tmp.replace(path)
+    return path
+
+
 def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
     """max_height=None → kein Cap (bis 4K); sonst Höhe begrenzen."""
     h = max_height
+    # YouTube Mehrkanal: DEUTSCH zuerst (default) + ORIGINAL daneben,
+    # wenn vorhanden. Synchronspuren (dubbed-auto) haben oft dieselbe tbr
+    # und würden ohne Filter zufällig gewinnen.
     if h:
-        fmt = f"bv*[height<={h}]+ba/b[height<={h}]/b"
+        base = f"bv*[height<={h}][protocol!^=m3u8]"
+        b_fb = f"/b[height<={h}]/b"
     else:
-        fmt = "bv*+ba/b"
+        base, b_fb = "bv*[protocol!^=m3u8]", "/b"
+    fmt = (f"{base}+ba[language^=de]"
+           f"+ba[format_note*=original][language!^=de]"
+           f"/{base}+ba[format_note*=original]"
+           f"/{base}+ba[language^=de]"
+           f"{b_fb}")
     opts = {
         "format": fmt,
         "format_sort": ["res", "tbr"],
         "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
+        "allow_multiple_audio_streams": True,
+        **({"js_runtimes": {"deno": {"path": find_deno()}}}
+            if find_deno() else {}),
         "mtime": False,
         "noprogress": False,
         "postprocessors": [
@@ -159,10 +226,10 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
         opts.update(writesubtitles=True, writeautomaticsub=True,
                     embedsubtitles=True,
                     sleep_interval_subtitles=1)
-        opts["subtitleslangs"] = (["de", "de-DE", "de-orig", "en",
-                                   "en-orig", "en-US", "en-GB"]
+        opts["subtitleslangs"] = (["de-DE", "de-orig", "de", "en-US",
+                                   "en-orig", "en-GB"]
                                   if subs == "all"
-                                  else ["de", "de-DE", "de-orig"])
+                                  else ["de-DE", "de-orig"])
     if opts.get("embedsubtitles"):
         opts["postprocessors"] = [
             opts["postprocessors"][0],
@@ -188,19 +255,32 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
 
 def build_args(url, out_dir, max_height=None, subs="auto", test=False):
     h = max_height
-    fmt = (f"bv*[height<={h}]+ba/b[height<={h}]/b" if h else "bv*+ba/b")
-    args = ["--format", fmt, "--format-sort", "res,tbr",
+    if h:
+        base = f"bv*[height<={h}][protocol!^=m3u8]"
+        b_fb = f"/b[height<={h}]/b"
+    else:
+        base, b_fb = "bv*[protocol!^=m3u8]", "/b"
+    fmt = (f"{base}+ba[language^=de]"
+           f"+ba[format_note*=original][language!^=de]"
+           f"/{base}+ba[format_note*=original]"
+           f"/{base}+ba[language^=de]"
+           f"{b_fb}")
+    args = ["--audio-multistreams",
+            "--format", fmt, "--format-sort", "res,tbr",
             "--remux-video", "mkv", "--embed-metadata", "--embed-thumbnail",
             "--write-thumbnail", "--no-mtime", "--no-playlist",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
     if subs == "all":
         args += ["--write-subs", "--write-auto-subs", "--sub-langs",
-                 "de,de-DE,de-orig,en,en-orig,en-US,en-GB", "--embed-subs"]
+                 "de-DE,de-orig,de,en-US,en-orig,en-GB", "--embed-subs"]
     elif subs == "auto":
         args += ["--write-subs", "--write-auto-subs", "--sub-langs",
-                 "de,de-DE,de-orig", "--embed-subs"]
+                 "de-DE,de-orig", "--embed-subs"]
     if test:
         args += ["--download-sections", "*0-60", "--force-keyframes-at-cuts"]
+    deno = find_deno()
+    if deno:
+        args += ["--js-runtimes", f"deno:{deno}"]
     if FROZEN:
         meipass = Path(getattr(sys, "_MEIPASS", ""))
         if meipass and ((meipass / "ffmpeg.exe").exists()
@@ -226,8 +306,12 @@ def download(url, out_dir=None, max_height=None, subs="auto", test=False):
                 sys.exit(f"[!] yt-dlp konnte nicht geladen werden: {e}")
         if ytdlp is not None:
             try:
+                started = time.time()
                 with ytdlp.YoutubeDL(opts) as ydl:
                     ydl.download([url])
+                mkv = find_newest_mkv(out_dir, started)
+                if mkv:
+                    fix_dual_audio(mkv)
                 return
             except Exception as e:  # noqa: BLE001
                 last_exc = e

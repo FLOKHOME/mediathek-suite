@@ -56,8 +56,13 @@ jobs:
           Get-ChildItem -Recurse -Filter "ffprobe.exe" ffmpegtmp |
             Move-Item -Destination ffmpeg
           Remove-Item -Recurse -Force ffmpegtmp, ffmpeg-pkg, ffmpeg-pkg.zip
+          curl -L -o deno.zip https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip
+          Expand-Archive deno.zip -DestinationPath denotmp
+          Move-Item denotmp/deno.exe ffmpeg
+          Remove-Item -Recurse -Force denotmp, deno.zip
           Get-ChildItem ffmpeg
           if (-not (Test-Path ffmpeg/ffprobe.exe)) { exit 1 }
+          if (-not (Test-Path ffmpeg/deno.exe)) { exit 1 }
 
       - name: ffmpeg entpacken (Linux)
         if: matrix.ffmpeg_layout == 'tar'
@@ -65,8 +70,13 @@ jobs:
           mkdir -p /tmp/fmf && tar xJf ffmpeg-pkg -C /tmp/fmf
           mv /tmp/fmf/*/bin/ffmpeg /tmp/fmf/*/bin/ffprobe ffmpeg/
           rm -rf /tmp/fmf ffmpeg-pkg
+          curl -L -o deno.zip https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip
+          python3 -m zipfile -e deno.zip /tmp/dz
+          mv /tmp/dz/deno ffmpeg/ && chmod +x ffmpeg/deno
+          rm -rf /tmp/dz deno.zip
           ls -la ffmpeg/
           test -f ffmpeg/ffprobe
+          test -f ffmpeg/deno
 
       - name: EXE bauen (PyInstaller onefile, windowed, yt-dlp + ffmpeg)
         run: pyinstaller --onefile --windowed --name ${{ matrix.out_name }}
