@@ -31,9 +31,9 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
 sys.path.insert(0, str(APP_DIR))
 
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
-SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF")
+SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
-           "ARD": "ard_dl", "ZDF": "zdf_dl"}
+           "ARD": "ard_dl", "ZDF": "zdf_dl", "YouTube": "yt_dl"}
 
 
 # --------------------------------------------------------------- Engine
@@ -63,6 +63,10 @@ def detect_url_source(text):
         return "ARD", text
     if "zdf.de" in host:
         return "ZDF", text
+    if "youtube.com" in host or "youtu.be" in host:
+        import yt_dl
+        vid = yt_dl.parse_video_id(text)
+        return ("YouTube", yt_dl.canonical_url(vid)) if vid else (None, None)
     return None, None
 
 
@@ -103,6 +107,12 @@ def do_search(source, query):
             label = r["title"]
             if r["meta"]:
                 label += f"  ({r['meta']})"
+            out.append((label, r["url"], r["url"], r.get("duration_min")))
+    elif source == "YouTube":
+        for r in mod.search(query):
+            label = r["title"]
+            if r["channel"]:
+                label += f"  [{r['channel']}]"
             out.append((label, r["url"], r["url"], r.get("duration_min")))
     else:  # ZDF
         for r in mod.search(query):
@@ -192,6 +202,8 @@ def details_from_info(source, info_dict):
              f"Dauer:          {minutes} Min" if minutes else "Dauer: ?"]
     if info_dict.get("release_year"):
         lines.append(f"Jahr:           {info_dict['release_year']}")
+    if info_dict.get("uploader"):
+        lines.append(f"Kanal:          {info_dict['uploader']}")
     if info_dict.get("upload_date"):
         lines.append(f"Veröffentlicht: {info_dict['upload_date']}")
     if info_dict.get("description"):
@@ -252,8 +264,8 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook):
     if source == "ARTE":
         kw_sub = {"auto": "de", "alle": "all", "keine": None}.get(subs, "de")
         _pid, url, _od, opts, _args = mod.build_spec(
-            token, out_dir=out_dir, max_height=max_height, audio="de",
-            subtitles=kw_sub, quality="best", test=test)
+            token, out_dir=out_dir, max_height=max_height or 1080,
+            audio="de", subtitles=kw_sub, quality="best", test=test)
         info = None
     elif source == "Netzkino":
         mv = mod.fetch_movie(token)
@@ -269,11 +281,16 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook):
         opts = mod.build_opts(out_dir, test)
     elif source == "3sat":
         url, info = token, None
-        opts = mod.build_opts(out_dir, max_height=max_height, subs=subs,
-                              test=test)
-    else:  # ARD / ZDF
+        opts = mod.build_opts(out_dir, max_height=max_height or 1080,
+                              subs=subs, test=test)
+    elif source == "YouTube":
+        # max_height=None = kein Cap (YouTube hat bis 4K/8K)
         url, info = token, None
         opts = mod.build_opts(token, out_dir, max_height=max_height,
+                              subs=subs, test=test)
+    else:  # ARD / ZDF
+        url, info = token, None
+        opts = mod.build_opts(token, out_dir, max_height=max_height or 1080,
                               subs=subs, test=test)
     opts = dict(opts)
     opts["noprogress"] = True            # Fortschritt kommt in die GUI
@@ -315,11 +332,21 @@ def selftest():
         "https://www.netzkino.de/details/man-on-the-moon")[0] == "Netzkino"
     assert detect_url_source(
         "https://www.3sat.de/film/spielfilm/sterben-104.html")[0] == "3sat"
-    print("  alle 5 Quellen erkannt")
+    assert detect_url_source("https://youtu.be/vSFdwSjRrw0")[0] == "YouTube"
+    assert detect_url_source(
+        "https://www.youtube.com/watch?v=vSFdwSjRrw0")[0] == "YouTube"
+    assert detect_url_source(
+        "https://www.youtube.com/shorts/vSFdwSjRrw0")[0] == "YouTube"
+    print("  alle 6 Quellen erkannt")
     for src, q_ in (("ARTE", "dark water"), ("Netzkino", "mondmann"),
                     ("3sat", "sterben"), ("ARD", "sterben"),
-                    ("ZDF", "sterben")):
-        r = do_search(src, q_)
+                    ("ZDF", "sterben"), ("YouTube", "anunnaki")):
+        try:
+            r = do_search(src, q_)
+        except Exception as e:  # noqa: BLE001
+            print(f"[selftest] {src}: Suche fehlgeschlagen ({e}) — "
+                  "möglich: Geo-/Bot-Restriction im CI-Netz, übersprungen")
+            continue
         if not r:
             print(f"[selftest] {src}: 0 Treffer (möglich: Geo-Restriction "
                   "im CI-Netz) – übersprungen")
@@ -380,6 +407,13 @@ def selftest():
     except RuntimeError as e:
         print(f"  netzkino: {e} (Geo-Restriction im CI-Netz möglich) "
               "– übersprungen")
+    url, opts, info = prepare("YouTube", "https://www.youtube.com/watch?v="
+                              "vSFdwSjRrw0", Path("/tmp"), None, "auto",
+                              False, queue.Queue(), null_hook)
+    keys = [p["key"] for p in opts["postprocessors"]]
+    assert "FFmpegVideoRemuxer" in keys
+    assert opts["writeautomaticsub"] is True
+    print(f"  youtube: pps={keys} | auto-subs an")
     print("[selftest] OK")
 
 
@@ -389,7 +423,7 @@ def run_gui():
     from tkinter import ttk, filedialog, messagebox
 
     root = tk.Tk()
-    root.title("Mediathek-Suite — ARTE · Netzkino · 3sat · ARD · ZDF")
+    root.title("Mediathek-Suite — ARTE · Netzkino · 3sat · ARD · ZDF · YouTube")
     root.geometry("1000x780")
     root.minsize(880, 660)
 
@@ -491,7 +525,7 @@ def run_gui():
     progress.pack(fill="x")
     status_var = tk.StringVar(
         value="Bereit. Sucht gleichzeitig in: ARTE · Netzkino · 3sat · "
-              "ARD · ZDF.")
+              "ARD · ZDF · YouTube.")
     ttk.Label(foot, textvariable=status_var, anchor="w").pack(
         fill="x", pady=(4, 2))
     log = tk.Text(foot, height=5, state="disabled",
@@ -606,7 +640,21 @@ def run_gui():
             except SystemExit as err:    # sys.exit-Fehler der Module
                 q.put(("error", f"Abgebrochen: {err}"))
             except Exception as err:  # noqa: BLE001
-                q.put(("error", f"Download fehlgeschlagen: {err}"))
+                low = str(err).lower()
+                if "subtitle" in low and subs != "keine":
+                    q.put(("log", "[i] Untertitel-Download blockiert "
+                                  "(Rate-Limit) — wiederhole ohne "
+                                  "Untertitel ..."))
+                    try:
+                        run_download(source, token, out_dir, max_h,
+                                     "keine", False, q, hook)
+                        q.put(("progress", 1.0))
+                        q.put(("status", f"[{source}] Fertig (ohne "
+                                         f"Untertitel) → {out_dir}"))
+                    except Exception as err2:  # noqa: BLE001
+                        q.put(("error", f"Download fehlgeschlagen: {err2}"))
+                else:
+                    q.put(("error", f"Download fehlgeschlagen: {err}"))
         threading.Thread(target=work, daemon=True).start()
 
     def redraw_results():

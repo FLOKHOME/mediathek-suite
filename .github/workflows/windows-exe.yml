@@ -72,7 +72,7 @@ jobs:
         run: pyinstaller --onefile --windowed --name ${{ matrix.out_name }}
           --collect-all yt_dlp --collect-all certifi
           --hidden-import arte_dl --hidden-import netzkino_dl
-          --hidden-import 3sat_dl --hidden-import ard_dl --hidden-import zdf_dl
+          --hidden-import 3sat_dl --hidden-import ard_dl --hidden-import zdf_dl --hidden-import yt_dl
           --add-binary "${{ matrix.addbin }}" mediathek_gui.py
 
       - name: Artefakt hochladen

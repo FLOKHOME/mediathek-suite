@@ -3,7 +3,7 @@
 *Deutsch | [English](README.en.md)*
 
 **Eine Suche über alle Mediatheken — ein Download-Knopf.**
-Quellen: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek**.
+Quellen: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · YouTube**.
 Download immer in der gewählten Qualität als **MKV** (Untertitel,
 Metadaten und Cover werden eingebettet, wo vorhanden).
 
@@ -26,9 +26,9 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 ## Bedienung
 
 1. **Suchbegriff oder URL eingeben** → „Suchen" durchsucht **gleichzeitig
-   alle 5 Quellen**; die Treffer erscheinen sofort, mit Quellen-Spalte.
+   alle 6 Quellen**; die Treffer erscheinen sofort, mit Quellen-Spalte.
    Eine eingefügte URL wird automatisch der passenden Quelle zugeordnet
-   (arte.tv, netzkino.de, 3sat.de, ardmediathek.de, zdf.de).
+   (arte.tv, netzkino.de, 3sat.de, ardmediathek.de, zdf.de, youtube.com, youtu.be).
 2. Treffer markieren → **Details laden**: lesbares Fenster mit Titel,
    Beschreibung, Dauer, Tonspuren, Untertiteln — und der Liste der
    **tatsächlich verfügbaren Auflösungen** (mit Bitrate).
@@ -45,6 +45,7 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 | 3sat | Server-rendered Seite | de-Untertitel eingebettet, Restzeit |
 | ARD | Server-rendered Suchseite | HLS bis 1080p |
 | ZDF | GraphQL (persistierte Query, Token aus der Seite) | 1080p/6,6 Mbit, de-Untertitel |
+| YouTube | ytsearch (yt-dlp) | bis 4K, Auto-Untertitel de; Hinweis: YouTube-Änderungen erfordern yt-dlp-Update (neue EXE) |
 
 ## Kommandozeile
 

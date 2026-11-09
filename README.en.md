@@ -3,14 +3,14 @@
 *[Deutsch](README.md) | English*
 
 **One search across all mediatheks — one download button.**
-Sources: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek**.
+Sources: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · YouTube**.
 Downloads always as **MKV** in the selected quality (subtitles, metadata
 and cover art embedded where available).
 
 The command-line modules ([arte-dl](https://github.com/FLOKHOME/arte-dl),
 [netzkino-dl](https://github.com/FLOKHOME/netzkino-dl),
 [3sat-dl](https://github.com/FLOKHOME/3sat-dl)) are embedded as modules —
-plus ard_dl and zdf_dl for ARD and ZDF.
+plus ard_dl, zdf_dl and yt_dl.
 
 ## Windows EXE (no installation)
 
@@ -24,7 +24,7 @@ Grab the latest `mediathek-suite-windows.exe` from the
 
 ## Usage
 
-1. **Enter a search term or URL** → "Suchen" searches **all 5 sources at
+1. **Enter a search term or URL** → "Suchen" searches **all 6 sources at
    once**; results appear as they arrive, tagged with their source.
    A pasted URL is auto-matched to its source (arte.tv, netzkino.de,
    3sat.de, ardmediathek.de, zdf.de).
@@ -44,6 +44,7 @@ Grab the latest `mediathek-suite-windows.exe` from the
 | 3sat | server-rendered page | embedded de subtitles, remaining time |
 | ARD | server-rendered search page | HLS up to 1080p |
 | ZDF | GraphQL (persisted query, token from page) | 1080p/6.6 Mbit, de subtitles |
+| YouTube | ytsearch (yt-dlp) | up to 4K, auto subtitles de; note: YouTube changes may require a yt-dlp update (rebuild) |
 
 ## Command line
 
