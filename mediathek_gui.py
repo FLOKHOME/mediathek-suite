@@ -565,7 +565,7 @@ def run_gui():
             q.put(("status", f"{source}: URL erkannt — 'Details laden' oder "
                              "direkt 'Herunterladen'."))
             return
-        q.put(("status", "Suche in 5 Quellen gleichzeitig ..."))
+        q.put(("status", "Suche in 6 Quellen gleichzeitig ..."))
         for src in SOURCES:
             def work(s=src):
                 try:
