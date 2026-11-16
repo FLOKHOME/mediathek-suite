@@ -30,6 +30,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Versionsname ermitteln
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -79,7 +89,8 @@ jobs:
           test -f ffmpeg/deno
 
       - name: EXE bauen (PyInstaller onefile, windowed, yt-dlp + ffmpeg)
-        run: pyinstaller --onefile --windowed --name ${{ matrix.out_name }}
+        run: pyinstaller --onefile --windowed
+          --name ${{ matrix.out_name }}-${{ steps.ver.outputs.version }}
           --collect-all yt_dlp --collect-all certifi
           --hidden-import arte_dl --hidden-import netzkino_dl
           --hidden-import 3sat_dl --hidden-import ard_dl --hidden-import zdf_dl --hidden-import yt_dl
@@ -88,11 +99,11 @@ jobs:
       - name: Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.out_name }}
-          path: dist/${{ matrix.out_name }}*
+          name: ${{ matrix.out_name }}-${{ steps.ver.outputs.version }}
+          path: dist/${{ matrix.out_name }}-${{ steps.ver.outputs.version }}*
 
       - name: Release erstellen (nur bei v-Tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.out_name }}*
+          files: dist/${{ matrix.out_name }}-${{ steps.ver.outputs.version }}*

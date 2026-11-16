@@ -32,7 +32,7 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
 SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
