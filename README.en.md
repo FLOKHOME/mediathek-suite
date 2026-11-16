@@ -31,7 +31,8 @@ Grab the latest `mediathek-suite-windows.exe` from the
 2. Select a hit → **Details laden**: a readable panel with title,
    description, duration, audio tracks, subtitles — and the list of
    **actually available resolutions** (with bitrate).
-3. **Choose the resolution** (best is preselected) → download.
+3. **Choose resolution and format** (MKV/MP4; best resolution
+   preselected) → download. MP4 embeds subtitles as mov_text, MKV as SRT.
    Target folder at the top (persisted, default:
    `Videos\Mediathek\<source>`), subtitles automatic/all/none.
 

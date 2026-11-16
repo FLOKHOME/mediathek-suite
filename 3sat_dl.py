@@ -186,7 +186,8 @@ def info(url):
 
 
 # --------------------------------------------------------------- Download
-def build_opts(out_dir, max_height=1080, subs="auto", test=False):
+def build_opts(out_dir, max_height=1080, subs="auto", test=False,
+               container="mkv"):
     h = max_height
     opts = {
         "format": FORMAT_CHAIN.format(h=h),
@@ -196,7 +197,7 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False):
         "noprogress": False,
         "postprocessors": [
             # Remux nach MKV (API braucht den Remuxer explizit)
-            {"key": "FFmpegVideoRemuxer", "preferedformat": "mkv"},
+            {"key": "FFmpegVideoRemuxer", "preferedformat": container},
             {"key": "FFmpegMetadata"},   # Metadaten einbetten
             {"key": "EmbedThumbnail"},   # Cover einbetten
         ],
@@ -214,7 +215,8 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False):
         # API-Pfad: Subtitle-PPs wie im CLI-Entry explizit setzen
         opts["postprocessors"] = [
             opts["postprocessors"][0],                      # Remuxer zuerst
-            {"key": "FFmpegSubtitlesConvertor", "format": "srt"},
+            {"key": "FFmpegSubtitlesConvertor",
+             "format": "srt" if container == "mkv" else "mov_text"},
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True},
             *opts["postprocessors"][1:],                    # Metadata, Cover
         ]
@@ -235,11 +237,12 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False):
     return opts
 
 
-def build_args(url, out_dir, max_height=1080, subs="auto", test=False):
+def build_args(url, out_dir, max_height=1080, subs="auto", test=False,
+               container="mkv"):
     h = max_height
     args = ["--format", FORMAT_CHAIN.format(h=h),
             "--format-sort", "res,tbr",
-            "--remux-video", "mkv",
+            "--remux-video", container,
             "--embed-metadata", "--embed-thumbnail", "--write-thumbnail",
             "--no-mtime",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
@@ -257,11 +260,12 @@ def build_args(url, out_dir, max_height=1080, subs="auto", test=False):
     return args
 
 
-def download(url, out_dir=None, max_height=1080, subs="auto", test=False):
+def download(url, out_dir=None, max_height=1080, subs="auto", test=False,
+             container="mkv"):
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    opts = build_opts(out_dir, max_height, subs, test)
-    args = build_args(url, out_dir, max_height, subs, test)
+    opts = build_opts(out_dir, max_height, subs, test, container)
+    args = build_args(url, out_dir, max_height, subs, test, container)
     print(f"[*] Lade {url} ({max_height}p max, Untertitel: {subs}) nach {out_dir}")
     try:
         ytdlp = get_ytdlp()

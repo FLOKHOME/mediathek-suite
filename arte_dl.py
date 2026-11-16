@@ -278,7 +278,8 @@ def info(token):
 
 # --------------------------------------------------------------- Download
 def build_spec(token, out_dir=None, max_height=1080, audio="de",
-               subtitles=None, quality="best", test=False):
+               subtitles=None, quality="best", test=False,
+               container="mkv"):
     """Baut Format-String, Output-Template und Optionen."""
     pid = parse_program_id(token)
     if not pid:
@@ -306,19 +307,20 @@ def build_spec(token, out_dir=None, max_height=1080, audio="de",
 
     opts = {
         "format": fmt,
-        "merge_output_format": "mkv",
+        "merge_output_format": container,
         "outtmpl": tpl,
         "mtime": False,
         "noprogress": False,
     }
-    pps = [{"key": "FFmpegVideoRemuxer", "preferedformat": "mkv"}]
+    pps = [{"key": "FFmpegVideoRemuxer", "preferedformat": container}]
     if sub_langs:
         opts["writesubtitles"] = True
         opts["subtitleslangs"] = sub_langs
         opts["embedsubtitles"] = True
         if convert_srt:
             opts["convertsubtitles"] = "srt"
-        pps += [{"key": "FFmpegSubtitlesConvertor", "format": "srt"},
+        pps += [{"key": "FFmpegSubtitlesConvertor",
+             "format": "srt" if container == "mkv" else "mov_text"},
                 {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True}]
     pps += [{"key": "FFmpegMetadata"}, {"key": "EmbedThumbnail"}]
     opts["writethumbnail"] = True
@@ -333,7 +335,8 @@ def build_spec(token, out_dir=None, max_height=1080, audio="de",
             opts.pop("download_ranges", None)
         opts["force_keyframes_at_cuts"] = True
 
-    args = ["--format", fmt, "--merge-output-format", "mkv", "--remux-video", "mkv",
+    args = ["--format", fmt, "--merge-output-format", container,
+            "--remux-video", container,
             "--output", tpl, "--newline", "--no-mtime", url]
     if sub_langs:
         args += ["--write-subtitles", "--sub-langs", ",".join(sub_langs),

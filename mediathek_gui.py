@@ -31,6 +31,7 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
+__version__ = "1.4.0"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
 SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
@@ -259,14 +260,16 @@ def get_details(source, token, q):
 
 
 # --------------------------------------------------------------- Download
-def prepare(source, token, out_dir, max_height, subs, test, q, hook):
+def prepare(source, token, out_dir, max_height, subs, test, q, hook,
+            container="mkv"):
     """Baut (url, opts, [info_dict]) für die yt-dlp-Ausführung."""
     mod = get_source_module(source)
     if source == "ARTE":
         kw_sub = {"auto": "de", "alle": "all", "keine": None}.get(subs, "de")
         _pid, url, _od, opts, _args = mod.build_spec(
             token, out_dir=out_dir, max_height=max_height or 1080,
-            audio="de", subtitles=kw_sub, quality="best", test=test)
+            audio="de", subtitles=kw_sub, quality="best", test=test,
+            container=container)
         info = None
     elif source == "Netzkino":
         mv = mod.fetch_movie(token)
@@ -279,20 +282,20 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook):
         if mv.get("hasDrm"):
             q.put(("log", "[i] Klartext-MP4 bestätigt."))
         info = mod.build_movie_info(mv, token, url, bitrate)
-        opts = mod.build_opts(out_dir, test)
+        opts = mod.build_opts(out_dir, test, container=container)
     elif source == "3sat":
         url, info = token, None
         opts = mod.build_opts(out_dir, max_height=max_height or 1080,
-                              subs=subs, test=test)
+                              subs=subs, test=test, container=container)
     elif source == "YouTube":
         # max_height=None = kein Cap (YouTube hat bis 4K/8K)
         url, info = token, None
         opts = mod.build_opts(token, out_dir, max_height=max_height,
-                              subs=subs, test=test)
+                              subs=subs, test=test, container=container)
     else:  # ARD / ZDF
         url, info = token, None
         opts = mod.build_opts(token, out_dir, max_height=max_height or 1080,
-                              subs=subs, test=test)
+                              subs=subs, test=test, container=container)
     opts = dict(opts)
     opts["noprogress"] = True            # Fortschritt kommt in die GUI
     opts["progress_hooks"] = [hook]
@@ -306,9 +309,10 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook):
     return url, opts, info
 
 
-def run_download(source, token, out_dir, max_height, subs, test, q, hook):
+def run_download(source, token, out_dir, max_height, subs, test, q, hook,
+                 container="mkv"):
     url, opts, info = prepare(source, token, out_dir, max_height, subs,
-                              test, q, hook)
+                              test, q, hook, container)
     ytdlp = get_source_module(source).get_ytdlp()
     with ytdlp.YoutubeDL(opts) as ydl:
         if info is not None:      # Netzkino: eigene Metadaten nutzen
@@ -415,6 +419,25 @@ def selftest():
     assert "FFmpegVideoRemuxer" in keys
     assert opts["writeautomaticsub"] is True
     print(f"  youtube: pps={keys} | auto-subs an")
+    print("[selftest] Container-Wahl ...")
+    for src, tok in (("ARTE", "133122-000-A"),
+                     ("Netzkino", "man-on-the-moon"),
+                     ("3sat", "https://www.3sat.de/film/spielfilm/"
+                              "sterben-104.html"),
+                     ("ARD", "https://www.ardmediathek.de/video/x/y"),
+                     ("ZDF", "https://www.zdf.de/filme/sterben-100.html"),
+                     ("YouTube", "https://www.youtube.com/watch?v="
+                                 "vSFdwSjRrw0")):
+        o1 = prepare(src, tok, Path("/tmp"), 1080, "keine", False,
+                     queue.Queue(), null_hook, container="mkv")[1]
+        o2 = prepare(src, tok, Path("/tmp"), 1080, "keine", False,
+                     queue.Queue(), null_hook, container="mp4")[1]
+        r1 = [p["preferedformat"] for p in o1["postprocessors"]
+              if p["key"] == "FFmpegVideoRemuxer"][0]
+        r2 = [p["preferedformat"] for p in o2["postprocessors"]
+              if p["key"] == "FFmpegVideoRemuxer"][0]
+        assert r1 == "mkv" and r2 == "mp4", f"{src}: {r1}/{r2}"
+    print("  alle 6 Quellen: MKV/MP4-Umschaltung OK")
     print("[selftest] OK")
 
 
@@ -424,7 +447,7 @@ def run_gui():
     from tkinter import ttk, filedialog, messagebox
 
     root = tk.Tk()
-    root.title("Mediathek-Suite — ARTE · Netzkino · 3sat · ARD · ZDF · YouTube")
+    root.title(f"Mediathek-Suite v{__version__} — ARTE · Netzkino · 3sat · ARD · ZDF · YouTube")
     root.geometry("1000x780")
     root.minsize(880, 660)
 
@@ -440,6 +463,7 @@ def run_gui():
                                                   str(default_out)))
     subs_var = tk.StringVar(value="Automatisch")
     res_var = tk.StringVar()
+    container_var = tk.StringVar(value="MKV")
     src_filter = tk.StringVar(value="Alle")
     len_filter = tk.StringVar(value="Alle")
     all_rows = []          # alle Treffer: {source, label, dur_text, token, duration_min}
@@ -510,6 +534,9 @@ def run_gui():
     ttk.Label(arow, text="Untertitel:").pack(side="left", padx=(12, 2))
     ttk.Combobox(arow, textvariable=subs_var, state="readonly", width=13,
                  values=("Automatisch", "Alle", "Keine")).pack(side="left")
+    ttk.Label(arow, text="Format:").pack(side="left", padx=(12, 2))
+    ttk.Combobox(arow, textvariable=container_var, state="readonly",
+                 width=6, values=("MKV", "MP4")).pack(side="left")
 
     # ---- Details-Fenster
     dframe = ttk.LabelFrame(root, text="Details zum ausgewählten Titel",
@@ -525,8 +552,8 @@ def run_gui():
     progress = ttk.Progressbar(foot, mode="determinate", maximum=1.0)
     progress.pack(fill="x")
     status_var = tk.StringVar(
-        value="Bereit. Sucht gleichzeitig in: ARTE · Netzkino · 3sat · "
-              "ARD · ZDF · YouTube.")
+        value=f"Bereit (v{__version__}). Sucht gleichzeitig in: ARTE · "
+              "Netzkino · 3sat · ARD · ZDF · YouTube.")
     ttk.Label(foot, textvariable=status_var, anchor="w").pack(
         fill="x", pady=(4, 2))
     log = tk.Text(foot, height=5, state="disabled",
@@ -616,8 +643,9 @@ def run_gui():
             subs_var.get().lower(), "auto")
         if source == "Netzkino":
             subs = "none"       # Netzkino liefert keine Untertitel
-        q.put(("status", f"[{source}] Download gestartet "
-                         f"({res_var.get() or 'Maximal'})"))
+        container = container_var.get().lower()   # "mkv" / "mp4"
+        q.put(("status", f"[{source}] Download gestartet ({container.upper()}, "
+                         f"{res_var.get() or 'Maximal'})"))
         q.put(("progress", 0.0))
 
         def hook(d):
@@ -636,7 +664,7 @@ def run_gui():
             try:
                 started = time.time()
                 run_download(source, token, out_dir, max_h, subs, False,
-                             q, hook)
+                             q, hook, container)
                 if source == "YouTube":
                     import yt_dl
                     mkv = yt_dl.find_newest_mkv(out_dir, started)
@@ -654,7 +682,7 @@ def run_gui():
                                   "Untertitel ..."))
                     try:
                         run_download(source, token, out_dir, max_h,
-                                     "keine", False, q, hook)
+                                     "keine", False, q, hook, container)
                         q.put(("progress", 1.0))
                         q.put(("status", f"[{source}] Fertig (ohne "
                                          f"Untertitel) → {out_dir}"))

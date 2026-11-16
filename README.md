@@ -32,7 +32,9 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 2. Treffer markieren → **Details laden**: lesbares Fenster mit Titel,
    Beschreibung, Dauer, Tonspuren, Untertiteln — und der Liste der
    **tatsächlich verfügbaren Auflösungen** (mit Bitrate).
-3. **Auflösung wählen** (beste ist vorausgewählt) → **Herunterladen**.
+3. **Auflösung und Format wählen** (MKV/MP4; Auflösung beste
+   vorausgewählt) → **Herunterladen**. Bei MP4 werden Untertitel als
+   mov_text eingebettet, bei MKV als SRT.
    Zielordner oben wählbar (wird gespeichert, Standard:
    `Videos\Mediathek\<Quelle>`), Untertitel automatisch/alle/keine.
 

@@ -189,7 +189,8 @@ def fix_dual_audio(path):
     return path
 
 
-def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
+def build_opts(url, out_dir, max_height=None, subs="auto", test=False,
+               container="mkv"):
     """max_height=None → kein Cap (bis 4K); sonst Höhe begrenzen."""
     h = max_height
     # YouTube Mehrkanal: DEUTSCH zuerst (default) + ORIGINAL daneben,
@@ -215,7 +216,7 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
         "mtime": False,
         "noprogress": False,
         "postprocessors": [
-            {"key": "FFmpegVideoRemuxer", "preferedformat": "mkv"},
+            {"key": "FFmpegVideoRemuxer", "preferedformat": container},
             {"key": "FFmpegMetadata"},
             {"key": "EmbedThumbnail"},
         ],
@@ -233,7 +234,8 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
     if opts.get("embedsubtitles"):
         opts["postprocessors"] = [
             opts["postprocessors"][0],
-            {"key": "FFmpegSubtitlesConvertor", "format": "srt"},
+            {"key": "FFmpegSubtitlesConvertor",
+             "format": "srt" if container == "mkv" else "mov_text"},
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True},
             *opts["postprocessors"][1:],
         ]
@@ -253,7 +255,8 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False):
     return opts
 
 
-def build_args(url, out_dir, max_height=None, subs="auto", test=False):
+def build_args(url, out_dir, max_height=None, subs="auto", test=False,
+               container="mkv"):
     h = max_height
     if h:
         base = f"bv*[height<={h}][protocol!^=m3u8]"
@@ -267,7 +270,7 @@ def build_args(url, out_dir, max_height=None, subs="auto", test=False):
            f"{b_fb}")
     args = ["--audio-multistreams",
             "--format", fmt, "--format-sort", "res,tbr",
-            "--remux-video", "mkv", "--embed-metadata", "--embed-thumbnail",
+            "--remux-video", container, "--embed-metadata", "--embed-thumbnail",
             "--write-thumbnail", "--no-mtime", "--no-playlist",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
     if subs == "all":
@@ -289,14 +292,17 @@ def build_args(url, out_dir, max_height=None, subs="auto", test=False):
     return args
 
 
-def download(url, out_dir=None, max_height=None, subs="auto", test=False):
+def download(url, out_dir=None, max_height=None, subs="auto", test=False,
+             container="mkv"):
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     attempts = (subs, "none") if subs != "none" else (subs,)
     last_exc = None
     for attempt_subs in attempts:
-        opts = build_opts(url, out_dir, max_height, attempt_subs, test)
-        args = build_args(url, out_dir, max_height, attempt_subs, test)
+        opts = build_opts(url, out_dir, max_height, attempt_subs, test,
+                          container)
+        args = build_args(url, out_dir, max_height, attempt_subs, test,
+                          container)
         print(f"[*] Lade {url} nach {out_dir}")
         try:
             ytdlp = get_ytdlp()
