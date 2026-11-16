@@ -31,7 +31,7 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
 SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
@@ -764,6 +764,20 @@ def run_gui():
         except Exception:
             pass
         root.destroy()
+
+    # Sanity-Check: veraltete gebündelte Module erkennen (TypeError bei
+    # container= würde sonst erst beim Download als kryptischer Fehler landen)
+    try:
+        get_source_module("ARTE").build_spec("133122-000-A", container="mp4")
+        get_source_module("YouTube").build_opts(
+            "https://x", Path(out_dir_var.get() or str(default_out)),
+            container="mp4")
+        append_log(f"[OK] Module geprüft (v{__version__}).")
+    except TypeError as err:
+        msg = ("Die EXE enthält veraltete Module — bitte die neueste "
+               f"mediathek-suite-windows.exe laden. ({err})")
+        append_log("[FEHLER] " + msg)
+        status_var.set(msg)
 
     pump()
     root.protocol("WM_DELETE_WINDOW", on_close)

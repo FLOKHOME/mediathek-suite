@@ -216,7 +216,7 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False,
         opts["postprocessors"] = [
             opts["postprocessors"][0],                      # Remuxer zuerst
             {"key": "FFmpegSubtitlesConvertor",
-             "format": "srt" if container == "mkv" else "mov_text"},
+             "format": "srt"},
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True},
             *opts["postprocessors"][1:],                    # Metadata, Cover
         ]

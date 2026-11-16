@@ -235,7 +235,7 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False,
         opts["postprocessors"] = [
             opts["postprocessors"][0],
             {"key": "FFmpegSubtitlesConvertor",
-             "format": "srt" if container == "mkv" else "mov_text"},
+             "format": "srt"},
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True},
             *opts["postprocessors"][1:],
         ]

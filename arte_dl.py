@@ -320,7 +320,7 @@ def build_spec(token, out_dir=None, max_height=1080, audio="de",
         if convert_srt:
             opts["convertsubtitles"] = "srt"
         pps += [{"key": "FFmpegSubtitlesConvertor",
-             "format": "srt" if container == "mkv" else "mov_text"},
+             "format": "srt"},
                 {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": True}]
     pps += [{"key": "FFmpegMetadata"}, {"key": "EmbedThumbnail"}]
     opts["writethumbnail"] = True
