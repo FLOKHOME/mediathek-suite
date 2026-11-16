@@ -17,6 +17,7 @@ Die Downloader liegen als Module neben dieser Datei (arte_dl, netzkino_dl,
 ffmpeg werden für die EXE mitgebaut (siehe .github/workflows).
 """
 import importlib
+import inspect
 import json
 import queue
 import re
@@ -31,7 +32,7 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-__version__ = "1.4.1"
+__version__ = "1.4.2"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
 SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
@@ -260,16 +261,27 @@ def get_details(source, token, q):
 
 
 # --------------------------------------------------------------- Download
+def call_maybe_container(fn, *args, **kwargs):
+    """Ruft fn auf; ohne container-Kwarg, falls das Modul veraltet ist."""
+    try:
+        params = inspect.signature(fn).parameters
+        if "container" not in params:
+            kwargs.pop("container", None)
+    except (ValueError, TypeError):
+        kwargs.pop("container", None)
+    return fn(*args, **kwargs)
+
+
 def prepare(source, token, out_dir, max_height, subs, test, q, hook,
             container="mkv"):
     """Baut (url, opts, [info_dict]) für die yt-dlp-Ausführung."""
     mod = get_source_module(source)
     if source == "ARTE":
         kw_sub = {"auto": "de", "alle": "all", "keine": None}.get(subs, "de")
-        _pid, url, _od, opts, _args = mod.build_spec(
-            token, out_dir=out_dir, max_height=max_height or 1080,
-            audio="de", subtitles=kw_sub, quality="best", test=test,
-            container=container)
+        _pid, url, _od, opts, _args = call_maybe_container(
+            mod.build_spec, token, out_dir=out_dir,
+            max_height=max_height or 1080, audio="de", subtitles=kw_sub,
+            quality="best", test=test, container=container)
         info = None
     elif source == "Netzkino":
         mv = mod.fetch_movie(token)
@@ -282,20 +294,26 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook,
         if mv.get("hasDrm"):
             q.put(("log", "[i] Klartext-MP4 bestätigt."))
         info = mod.build_movie_info(mv, token, url, bitrate)
-        opts = mod.build_opts(out_dir, test, container=container)
+        opts = call_maybe_container(mod.build_opts, out_dir, test,
+                                    container=container)
     elif source == "3sat":
         url, info = token, None
-        opts = mod.build_opts(out_dir, max_height=max_height or 1080,
-                              subs=subs, test=test, container=container)
+        opts = call_maybe_container(mod.build_opts, out_dir,
+                                    max_height=max_height or 1080,
+                                    subs=subs, test=test,
+                                    container=container)
     elif source == "YouTube":
         # max_height=None = kein Cap (YouTube hat bis 4K/8K)
         url, info = token, None
-        opts = mod.build_opts(token, out_dir, max_height=max_height,
-                              subs=subs, test=test, container=container)
+        opts = call_maybe_container(mod.build_opts, token, out_dir,
+                                    max_height=max_height, subs=subs,
+                                    test=test, container=container)
     else:  # ARD / ZDF
         url, info = token, None
-        opts = mod.build_opts(token, out_dir, max_height=max_height or 1080,
-                              subs=subs, test=test, container=container)
+        opts = call_maybe_container(
+            mod.build_opts, token, out_dir,
+            max_height=max_height or 1080, subs=subs, test=test,
+            container=container)
     opts = dict(opts)
     opts["noprogress"] = True            # Fortschritt kommt in die GUI
     opts["progress_hooks"] = [hook]
@@ -773,6 +791,9 @@ def run_gui():
             "https://x", Path(out_dir_var.get() or str(default_out)),
             container="mp4")
         append_log(f"[OK] Module geprüft (v{__version__}).")
+        for src in SOURCES:
+            m = get_source_module(src)
+            append_log(f"[i] {src}: {getattr(m, '__file__', '?')}")
     except TypeError as err:
         msg = ("Die EXE enthält veraltete Module — bitte die neueste "
                f"mediathek-suite-windows.exe laden. ({err})")
