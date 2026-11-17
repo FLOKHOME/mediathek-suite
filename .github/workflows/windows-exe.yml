@@ -45,7 +45,7 @@ jobs:
           python-version: '3.12'
 
       - name: yt-dlp + PyInstaller installieren
-        run: pip install "yt-dlp[default]" pyinstaller
+        run: pip install "yt-dlp[default]" pyinstaller curl-cffi
 
       - name: Headless-Selftest (Suchen + Optionsbau)
         run: python mediathek_gui.py --selftest
@@ -93,7 +93,7 @@ jobs:
           --name ${{ matrix.out_name }}-${{ steps.ver.outputs.version }}
           --collect-all yt_dlp --collect-all certifi
           --hidden-import arte_dl --hidden-import netzkino_dl
-          --hidden-import 3sat_dl --hidden-import ard_dl --hidden-import zdf_dl --hidden-import yt_dl
+          --hidden-import 3sat_dl --hidden-import ard_dl --hidden-import zdf_dl --hidden-import orf_dl --hidden-import yt_dl
           --add-binary "${{ matrix.addbin }}" mediathek_gui.py
 
       - name: Artefakt hochladen

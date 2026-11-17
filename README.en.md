@@ -3,7 +3,14 @@
 *[Deutsch](README.md) | English*
 
 **One search across all mediatheks — one download button.**
-Sources: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · YouTube**.
+Sources: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · ORF · YouTube**.
+
+**ORF note:** ORF search and most ORF content require an Austrian IP. The
+suite checks before every ORF download whether the ORF serves real video
+or only the geo placeholder ("Austria only") at the current IP and aborts
+cleanly instead of saving placeholder files. With an AT IP (e.g. VPN),
+search and download work. ORF content marked worldwide (e.g. older
+Vorstadtweiber episodes) also works from outside Austria.
 Downloads always as **MKV** in the selected quality (subtitles, metadata
 and cover art embedded where available).
 

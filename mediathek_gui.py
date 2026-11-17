@@ -32,11 +32,12 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-__version__ = "1.4.3"
+__version__ = "1.4.4"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
-SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "YouTube")
+SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "ORF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
-           "ARD": "ard_dl", "ZDF": "zdf_dl", "YouTube": "yt_dl"}
+           "ARD": "ard_dl", "ZDF": "zdf_dl", "ORF": "orf_dl",
+           "YouTube": "yt_dl"}
 
 
 # --------------------------------------------------------------- Engine
@@ -56,6 +57,11 @@ def detect_url_source(text):
         import arte_dl
         pid = arte_dl.parse_program_id(text)
         return ("ARTE", pid) if pid else (None, None)
+    if "on.orf.at" in host:
+        import orf_dl
+        vid, _seg = orf_dl.parse_video_id(text)
+        return ("ORF", f"https://on.orf.at/video/{vid}") if vid \
+            else (None, None)
     if "netzkino.de" in host:
         import netzkino_dl
         slug = netzkino_dl.parse_slug(text)
@@ -308,7 +314,7 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook,
         opts = call_maybe_container(mod.build_opts, token, out_dir,
                                     max_height=max_height, subs=subs,
                                     test=test, container=container)
-    else:  # ARD / ZDF
+    else:  # ARD / ZDF / ORF
         url, info = token, None
         opts = call_maybe_container(
             mod.build_opts, token, out_dir,
@@ -439,6 +445,7 @@ def selftest():
     print(f"  youtube: pps={keys} | auto-subs an")
     print("[selftest] Container-Wahl ...")
     for src, tok in (("ARTE", "133122-000-A"),
+                     ("ORF", "https://on.orf.at/video/14325269"),
                      ("Netzkino", "man-on-the-moon"),
                      ("3sat", "https://www.3sat.de/film/spielfilm/"
                               "sterben-104.html"),
@@ -461,6 +468,14 @@ def selftest():
               if p["key"] == "FFmpegVideoRemuxer"][0]
         assert r1 == "mkv" and r2 == "mp4", f"{src}: {r1}/{r2}"
     print("  Container-Umschaltung geprüft (verfügbare Quellen)")
+    print("[selftest] ORF-Geo-Schutz ...")
+    import orf_dl
+    d = orf_dl.get_episode_data("14346836")   # right=austria
+    assert orf_dl.geo_status(d) == "austria"
+    d2 = orf_dl.get_episode_data("14325269")  # right=worldwide
+    assert orf_dl.geo_status(d2) == "ok"
+    print("  Geo-Kennung erkannt (austria/worldwide); "
+          "Platzhalter-Abbruch nur live prüfbar")
     print("[selftest] OK")
 
 

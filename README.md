@@ -3,7 +3,15 @@
 *Deutsch | [English](README.en.md)*
 
 **Eine Suche über alle Mediatheken — ein Download-Knopf.**
-Quellen: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · YouTube**.
+Quellen: **ARTE · Netzkino · 3sat · ARD Mediathek · ZDF Mediathek · ORF · YouTube**.
+
+**ORF-Hinweis:** Die ORF-Suche und die meisten ORF-Inhalte laufen nur mit
+österreichischer IP. Die Suite prüft vor jedem ORF-Download, ob der ORF
+an der aktuellen IP echtes Video oder nur den Geo-Platzhalter ausliefert
+(„nur in Österreich“) und bricht sauber ab, statt Platzhalter-Dateien
+zu speichern. Mit AT-IP (z. B. VPN) funktionieren Suche und Download.
+Weltweit freigegebene ORF-Inhalte (z. B. ältere Vorstadtweiber-Folgen)
+funktionieren auch aus Deutschland.
 Download immer in der gewählten Qualität als **MKV** (Untertitel,
 Metadaten und Cover werden eingebettet, wo vorhanden).
 
@@ -26,7 +34,7 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 ## Bedienung
 
 1. **Suchbegriff oder URL eingeben** → „Suchen" durchsucht **gleichzeitig
-   alle 6 Quellen**; die Treffer erscheinen sofort, mit Quellen-Spalte.
+   alle 7 Quellen**; die Treffer erscheinen sofort, mit Quellen-Spalte.
    Eine eingefügte URL wird automatisch der passenden Quelle zugeordnet
    (arte.tv, netzkino.de, 3sat.de, ardmediathek.de, zdf.de, youtube.com, youtu.be).
 2. Treffer markieren → **Details laden**: lesbares Fenster mit Titel,
