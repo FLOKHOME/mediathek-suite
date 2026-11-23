@@ -38,8 +38,18 @@ Grab the latest `mediathek-suite-windows.exe` from the
 2. Select a hit → **Details laden**: a readable panel with title,
    description, duration, audio tracks, subtitles — and the list of
    **actually available resolutions** (with bitrate).
-3. **Choose resolution and format** (MKV/MP4; best resolution
-   preselected) → download. MP4 embeds subtitles as mov_text, MKV as SRT.
+3. **Choose resolution, format (MKV/MP4) and a size limit** →
+   download. MP4 embeds subtitles as mov_text, MKV as SRT.
+
+**Size limit:** ARTE/ORF automatically pick a lower quality
+ladder to fit the limit; for YouTube and the other
+mediatheks the download aborts with a clear message when the
+file would exceed the limit.
+
+**ARTE preview trap:** If a film is not yet published as a
+full VOD, the player only serves a short excerpt (e.g. 80 s
+of a 99 min film). The suite detects this via durations and
+aborts cleanly instead of saving a broken file.
    Target folder at the top (persisted, default:
    `Videos\Mediathek\<source>`), subtitles automatic/all/none.
 

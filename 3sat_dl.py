@@ -187,7 +187,7 @@ def info(url):
 
 # --------------------------------------------------------------- Download
 def build_opts(out_dir, max_height=1080, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     h = max_height
     opts = {
         "format": FORMAT_CHAIN.format(h=h),
@@ -195,6 +195,7 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False,
         "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
         "mtime": False,
         "noprogress": False,
+        **({"max_filesize": int(max_size)} if max_size else {}),
         "postprocessors": [
             # Remux nach MKV (API braucht den Remuxer explizit)
             {"key": "FFmpegVideoRemuxer", "preferedformat": container},
@@ -238,7 +239,7 @@ def build_opts(out_dir, max_height=1080, subs="auto", test=False,
 
 
 def build_args(url, out_dir, max_height=1080, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     h = max_height
     args = ["--format", FORMAT_CHAIN.format(h=h),
             "--format-sort", "res,tbr",
@@ -246,6 +247,8 @@ def build_args(url, out_dir, max_height=1080, subs="auto", test=False,
             "--embed-metadata", "--embed-thumbnail", "--write-thumbnail",
             "--no-mtime",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
+    if max_size:
+        args += ["--max-filesize", str(int(max_size))]
     if subs == "all":
         args += ["--write-subs", "--sub-langs", "all", "--embed-subs"]
     elif subs == "auto":
@@ -261,10 +264,10 @@ def build_args(url, out_dir, max_height=1080, subs="auto", test=False,
 
 
 def download(url, out_dir=None, max_height=1080, subs="auto", test=False,
-             container="mkv"):
+             container="mkv", max_size=None):
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    opts = build_opts(out_dir, max_height, subs, test, container)
+    opts = build_opts(out_dir, max_height, subs, test, container, max_size)
     args = build_args(url, out_dir, max_height, subs, test, container)
     print(f"[*] Lade {url} ({max_height}p max, Untertitel: {subs}) nach {out_dir}")
     try:

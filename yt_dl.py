@@ -190,7 +190,7 @@ def fix_dual_audio(path):
 
 
 def build_opts(url, out_dir, max_height=None, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     """max_height=None → kein Cap (bis 4K); sonst Höhe begrenzen."""
     h = max_height
     # YouTube Mehrkanal: DEUTSCH zuerst (default) + ORIGINAL daneben,
@@ -215,6 +215,7 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False,
             if find_deno() else {}),
         "mtime": False,
         "noprogress": False,
+        **({"max_filesize": int(max_size)} if max_size else {}),
         "postprocessors": [
             {"key": "FFmpegVideoRemuxer", "preferedformat": container},
             {"key": "FFmpegMetadata"},
@@ -256,7 +257,7 @@ def build_opts(url, out_dir, max_height=None, subs="auto", test=False,
 
 
 def build_args(url, out_dir, max_height=None, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     h = max_height
     if h:
         base = f"bv*[height<={h}][protocol!^=m3u8]"
@@ -273,6 +274,8 @@ def build_args(url, out_dir, max_height=None, subs="auto", test=False,
             "--remux-video", container, "--embed-metadata", "--embed-thumbnail",
             "--write-thumbnail", "--no-mtime", "--no-playlist",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
+    if max_size:
+        args += ["--max-filesize", str(int(max_size))]
     if subs == "all":
         args += ["--write-subs", "--write-auto-subs", "--sub-langs",
                  "de-DE,de-orig,de,en-US,en-orig,en-GB", "--embed-subs"]
@@ -293,16 +296,16 @@ def build_args(url, out_dir, max_height=None, subs="auto", test=False,
 
 
 def download(url, out_dir=None, max_height=None, subs="auto", test=False,
-             container="mkv"):
+             container="mkv", max_size=None):
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     attempts = (subs, "none") if subs != "none" else (subs,)
     last_exc = None
     for attempt_subs in attempts:
         opts = build_opts(url, out_dir, max_height, attempt_subs, test,
-                          container)
+                          container, max_size)
         args = build_args(url, out_dir, max_height, attempt_subs, test,
-                          container)
+                          container, max_size)
         print(f"[*] Lade {url} nach {out_dir}")
         try:
             ytdlp = get_ytdlp()

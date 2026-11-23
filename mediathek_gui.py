@@ -32,7 +32,7 @@ APP_DIR = Path(__file__).resolve().parent if not getattr(sys, "frozen", False) \
     else Path(sys.executable).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-__version__ = "1.4.4"
+__version__ = "1.5.0"
 SETTINGS_FILE = Path.home() / ".mediathek-suite.json"
 SOURCES = ("ARTE", "Netzkino", "3sat", "ARD", "ZDF", "ORF", "YouTube")
 MODULES = {"ARTE": "arte_dl", "Netzkino": "netzkino_dl", "3sat": "3sat_dl",
@@ -268,18 +268,21 @@ def get_details(source, token, q):
 
 # --------------------------------------------------------------- Download
 def call_maybe_container(fn, *args, **kwargs):
-    """Ruft fn auf; ohne container-Kwarg, falls das Modul veraltet ist."""
+    """Ruft fn auf; Kwargs, die die Signatur nicht kennt (container,
+    max_size …), werden bei veralteten Modulen still entfernt."""
     try:
         params = inspect.signature(fn).parameters
-        if "container" not in params:
-            kwargs.pop("container", None)
+        for k in list(kwargs):
+            if k not in params:
+                kwargs.pop(k)
     except (ValueError, TypeError):
-        kwargs.pop("container", None)
+        for k in list(kwargs):
+            kwargs.pop(k)
     return fn(*args, **kwargs)
 
 
 def prepare(source, token, out_dir, max_height, subs, test, q, hook,
-            container="mkv"):
+            container="mkv", max_size=None):
     """Baut (url, opts, [info_dict]) für die yt-dlp-Ausführung."""
     mod = get_source_module(source)
     if source == "ARTE":
@@ -287,7 +290,8 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook,
         _pid, url, _od, opts, _args = call_maybe_container(
             mod.build_spec, token, out_dir=out_dir,
             max_height=max_height or 1080, audio="de", subtitles=kw_sub,
-            quality="best", test=test, container=container)
+            quality="best", test=test, container=container,
+            max_size=max_size)
         info = None
     elif source == "Netzkino":
         mv = mod.fetch_movie(token)
@@ -301,25 +305,28 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook,
             q.put(("log", "[i] Klartext-MP4 bestätigt."))
         info = mod.build_movie_info(mv, token, url, bitrate)
         opts = call_maybe_container(mod.build_opts, out_dir, test,
-                                    container=container)
+                                    container=container,
+                                    max_size=max_size)
     elif source == "3sat":
         url, info = token, None
         opts = call_maybe_container(mod.build_opts, out_dir,
                                     max_height=max_height or 1080,
                                     subs=subs, test=test,
-                                    container=container)
+                                    container=container,
+                                    max_size=max_size)
     elif source == "YouTube":
         # max_height=None = kein Cap (YouTube hat bis 4K/8K)
         url, info = token, None
         opts = call_maybe_container(mod.build_opts, token, out_dir,
                                     max_height=max_height, subs=subs,
-                                    test=test, container=container)
+                                    test=test, container=container,
+                                    max_size=max_size)
     else:  # ARD / ZDF / ORF
         url, info = token, None
         opts = call_maybe_container(
             mod.build_opts, token, out_dir,
             max_height=max_height or 1080, subs=subs, test=test,
-            container=container)
+            container=container, max_size=max_size)
     opts = dict(opts)
     opts["noprogress"] = True            # Fortschritt kommt in die GUI
     opts["progress_hooks"] = [hook]
@@ -334,9 +341,9 @@ def prepare(source, token, out_dir, max_height, subs, test, q, hook,
 
 
 def run_download(source, token, out_dir, max_height, subs, test, q, hook,
-                 container="mkv"):
+                 container="mkv", max_size=None):
     url, opts, info = prepare(source, token, out_dir, max_height, subs,
-                              test, q, hook, container)
+                              test, q, hook, container, max_size)
     ytdlp = get_source_module(source).get_ytdlp()
     with ytdlp.YoutubeDL(opts) as ydl:
         if info is not None:      # Netzkino: eigene Metadaten nutzen
@@ -468,6 +475,21 @@ def selftest():
               if p["key"] == "FFmpegVideoRemuxer"][0]
         assert r1 == "mkv" and r2 == "mp4", f"{src}: {r1}/{r2}"
     print("  Container-Umschaltung geprüft (verfügbare Quellen)")
+    print("[selftest] Größenlimit ...")
+    o = prepare("ARTE", "117646-000-A", Path("/tmp"), 1080, "keine", False,
+                queue.Queue(), null_hook, container="mkv",
+                max_size=2_000_000_000)[1]
+    assert "tbr<=" in o["format"], o["format"]
+    assert o.get("max_filesize") == 2_000_000_000
+    o = prepare("YouTube", "https://www.youtube.com/watch?v=vSFdwSjRrw0",
+                Path("/tmp"), None, "keine", False, queue.Queue(),
+                null_hook, container="mkv", max_size=1_000_000_000)[1]
+    assert o.get("max_filesize") == 1_000_000_000
+    o = prepare("ORF", "https://on.orf.at/video/14325269", Path("/tmp"),
+                1080, "keine", False, queue.Queue(), null_hook,
+                container="mkv", max_size=1_000_000_000)[1]
+    assert "tbr<=" in o["format"]
+    print("  ARTE/ORF: tbr-Cap; YouTube: max_filesize")
     print("[selftest] ORF-Geo-Schutz ...")
     import orf_dl
     d = orf_dl.get_episode_data("14346836")   # right=austria
@@ -502,6 +524,7 @@ def run_gui():
     subs_var = tk.StringVar(value="Automatisch")
     res_var = tk.StringVar()
     container_var = tk.StringVar(value="MKV")
+    size_var = tk.StringVar(value="Unbegrenzt")
     src_filter = tk.StringVar(value="Alle")
     len_filter = tk.StringVar(value="Alle")
     all_rows = []          # alle Treffer: {source, label, dur_text, token, duration_min}
@@ -575,6 +598,10 @@ def run_gui():
     ttk.Label(arow, text="Format:").pack(side="left", padx=(12, 2))
     ttk.Combobox(arow, textvariable=container_var, state="readonly",
                  width=6, values=("MKV", "MP4")).pack(side="left")
+    ttk.Label(arow, text="Größe max.:").pack(side="left", padx=(12, 2))
+    ttk.Combobox(arow, textvariable=size_var, state="readonly", width=10,
+                 values=("Unbegrenzt", "700 MB", "1 GB", "2 GB",
+                         "4 GB")).pack(side="left")
 
     # ---- Details-Fenster
     dframe = ttk.LabelFrame(root, text="Details zum ausgewählten Titel",
@@ -682,8 +709,13 @@ def run_gui():
         if source == "Netzkino":
             subs = "none"       # Netzkino liefert keine Untertitel
         container = container_var.get().lower()   # "mkv" / "mp4"
+        size_map = {"unbegrenzt": None, "700 mb": 700_000_000,
+                    "1 gb": 1_000_000_000, "2 gb": 2_000_000_000,
+                    "4 gb": 4_000_000_000}
+        max_size = size_map.get(size_var.get().lower())
         q.put(("status", f"[{source}] Download gestartet ({container.upper()}, "
-                         f"{res_var.get() or 'Maximal'})"))
+                         f"{res_var.get() or 'Maximal'}, "
+                         f"{size_var.get()})"))
         q.put(("progress", 0.0))
 
         def hook(d):
@@ -702,7 +734,7 @@ def run_gui():
             try:
                 started = time.time()
                 run_download(source, token, out_dir, max_h, subs, False,
-                             q, hook, container)
+                             q, hook, container, max_size)
                 if source == "YouTube":
                     import yt_dl
                     mkv = yt_dl.find_newest_mkv(out_dir, started)
@@ -720,7 +752,8 @@ def run_gui():
                                   "Untertitel ..."))
                     try:
                         run_download(source, token, out_dir, max_h,
-                                     "keine", False, q, hook, container)
+                                     "keine", False, q, hook, container,
+                                     max_size)
                         q.put(("progress", 1.0))
                         q.put(("status", f"[{source}] Fertig (ohne "
                                          f"Untertitel) → {out_dir}"))

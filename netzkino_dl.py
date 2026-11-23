@@ -260,13 +260,14 @@ def build_movie_info(mv, slug, url, bitrate):
     }
 
 
-def build_opts(out_dir, test, container="mkv"):
+def build_opts(out_dir, test, container="mkv", max_size=None):
     opts = {
         "format": "best",
         "remuxvideo": "mkv",                 # Ziel-MKV, verlustfreies Remux
         "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
         "mtime": False,
         "noprogress": False,
+        **({"max_filesize": int(max_size)} if max_size else {}),
         "postprocessors": [
             {"key": "FFmpegVideoRemuxer", "preferedformat": container},
             {"key": "FFmpegMetadata"},   # Metadaten einbetten
@@ -286,7 +287,7 @@ def build_opts(out_dir, test, container="mkv"):
 
 
 def download(token, out_dir=None, test=False, no_sub=False,
-             container="mkv"):
+             container="mkv", max_size=None):
     slug = parse_slug(token)
     if not slug:
         sys.exit(f"[!] Kein Slug in {token!r}")
@@ -305,7 +306,7 @@ def download(token, out_dir=None, test=False, no_sub=False,
         print("[i] Klartext-MP4 bestätigt – Download ohne DRM-Umgehung möglich.")
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    opts = build_opts(out_dir, test, container)
+    opts = build_opts(out_dir, test, container, max_size)
     args = ["--format", "best", "--remux-video", container,
             "--embed-metadata", "--embed-thumbnail", "--write-thumbnail",
             "--no-mtime", "--output", str(out_dir / "%(title)s.%(ext)s"), url]

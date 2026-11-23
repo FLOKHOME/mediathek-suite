@@ -22,6 +22,7 @@ Kommandos (optional, als CLI):
         [--subs auto|all|none] [--test] [--format mkv|mp4]
 """
 import base64
+import functools
 import json
 import os
 import re
@@ -107,6 +108,7 @@ def parse_video_id(text):
     return None, None
 
 
+@functools.lru_cache(maxsize=8)
 def get_episode_data(vid):
     enc = base64.b64encode(f"{MAGIC}{vid}".encode()).decode()
     return http_get_json(f"{API}/public/episode/encrypted/{enc}")
@@ -281,14 +283,45 @@ def search(query):
 
 # --------------------------------------------------------------- yt-dlp-Optionen
 def build_opts(url, out_dir, max_height=1080, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
+    out_dir = Path(out_dir)
     h = max_height
+    # Geo-/Platzhalter-Guard: läuft auch, wenn die GUI nur build_opts ruft
+    vid, _seg = parse_video_id(url)
+    expected = None
+    if vid:
+        data = get_episode_data(vid)
+        status = geo_status(data)
+        if status == "drm":
+            raise RuntimeError(
+                f"ORF: „{data.get('title') or vid}“ ist DRM-geschützt – "
+                "kein Download möglich.")
+        if status == "austria" and geo_stream_ok(data) is False:
+            raise RuntimeError(
+                f"ORF: „{data.get('title') or vid}“ ist nur in Österreich "
+                "abspielbar (right=austria) — an dieser IP gibt der ORF nur "
+                "einen Platzhalter aus. Mit AT-IP (VPN/Standort) "
+                "funktioniert der Download.")
+        expected = data.get("duration_seconds") or None
+    tbr_cap = ""
+    if max_size and expected and expected >= 60:
+        kbps = int(max_size * 8 / 1000 / expected) - 224
+        if kbps > 300:
+            tbr_cap = f"[tbr<={kbps}]"
+    template = FORMAT_CHAIN
+    if tbr_cap:
+        template = template.replace(
+            "bv*[height<={h}]", f"bv*[height<={{h}}]{tbr_cap}")
+        template = template.replace(
+            "/b[height<={h}]", f"/b[height<={{h}}]{tbr_cap}")
+    fmt = template.format(h=h)
     opts = {
-        "format": FORMAT_CHAIN.format(h=h),
+        "format": fmt,
         "format_sort": ["res", "tbr"],
         "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
         "mtime": False,
         "noprogress": False,
+        **({"max_filesize": int(max_size)} if max_size else {}),
         "postprocessors": [
             {"key": "FFmpegVideoRemuxer", "preferedformat": container},
             {"key": "FFmpegMetadata"},
@@ -326,12 +359,14 @@ def build_opts(url, out_dir, max_height=1080, subs="auto", test=False,
 
 
 def build_args(url, out_dir, max_height=1080, subs="auto", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     h = max_height
     args = ["--format", FORMAT_CHAIN.format(h=h), "--format-sort", "res,tbr",
             "--remux-video", container, "--embed-metadata", "--embed-thumbnail",
             "--write-thumbnail", "--no-mtime",
             "--output", str(out_dir / "%(title)s.%(ext)s"), url]
+    if max_size:
+        args += ["--max-filesize", str(int(max_size))]
     if subs == "all":
         args += ["--write-subs", "--sub-langs", "all", "--embed-subs"]
     elif subs == "auto":
@@ -379,7 +414,7 @@ def fetch_info_dict(token):
 
 # --------------------------------------------------------------- Download
 def download(url, out_dir=None, max_height=1080, subs="auto", test=False,
-             container="mkv"):
+             container="mkv", max_size=None):
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -426,7 +461,7 @@ def download(url, out_dir=None, max_height=1080, subs="auto", test=False,
         shutil.rmtree(probe_dir, ignore_errors=True)
 
     opts = build_opts(f"{BASE_VIDEO}/{vid}", out_dir, max_height, subs,
-                      test, container)
+                      test, container, max_size)
     print(f"[*] Lade ORF {vid} nach {out_dir}")
     ytdlp = get_ytdlp()
     with ytdlp.YoutubeDL(opts) as ydl:

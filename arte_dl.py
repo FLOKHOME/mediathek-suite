@@ -127,6 +127,82 @@ def http_get(url, timeout=30):
         return r.read().decode("utf-8", errors="replace")
 
 
+def check_availability(pid):
+    """Gibt das zukünftige Freischaltdatum zurück, falls das Programm noch
+    nicht verfügbar ist. ARTE liefert dann nur einen Teaser-Stream
+    (~80 s), der beim Download als kryptischer Postprocessing-Fehler
+    endet. Deshalb vorab prüfen."""
+    try:
+        import datetime as dt
+        d = json.loads(http_get(
+            f"https://api.arte.tv/api/player/v2/config/de/{pid}"))
+        attrs = d.get("data", {}).get("attributes", {})
+        begin = (attrs.get("rights") or {}).get("begin") or ""
+        if begin:
+            b = dt.datetime.fromisoformat(begin.replace("Z", "+00:00"))
+            if b > dt.datetime.now(dt.timezone.utc):
+                return b
+    except RuntimeError:
+        raise
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def program_duration(pid):
+    """Erwartete Programmdauer (s) aus der SSR-Videoseite; None wenn unklar."""
+    try:
+        html = http_get(f"https://www.arte.tv/de/videos/{pid}/")
+    except Exception:  # noqa: BLE001
+        return None
+    clean = html.replace("\\", "")
+    vals = [int(x) for x in re.findall(
+        r'"duration"\s*:\s*\{"seconds"\s*:\s*(\d+)', clean)]
+    if not vals:
+        return None
+    # Dauer zum konkreten Programm bevorzugen (liveProgramId=PID …)
+    i = clean.find(f"liveProgramId={pid}")
+    if i >= 0:
+        m = re.search(r'"duration"\s*:\s*\{"seconds"\s*:\s*(\d+)',
+                      clean[i:i + 400])
+        if m:
+            return int(m.group(1))
+    return max(vals)
+
+
+def player_stream_seconds(pid):
+    """Streamdauer laut Player-Konfiguration (s); None wenn unklar."""
+    try:
+        d = json.loads(http_get(
+            f"https://api.arte.tv/api/player/v2/config/de/{pid}"))
+        md = (d.get("data", {}).get("attributes", {})
+              .get("metadata") or {}).get("duration") or {}
+        return md.get("seconds")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_full_stream(pid, player_seconds=None):
+    """RuntimeError, wenn der Player nur eine Vorschau liefert (Stream
+    deutlich kürzer als das Programm)."""
+    try:
+        expected = program_duration(pid)
+        if not expected or expected < 60:
+            return
+        got = player_seconds if player_seconds is not None \
+            else player_stream_seconds(pid)
+        if got and got < 0.5 * expected:
+            raise RuntimeError(
+                f"ARTE: Für {pid} liefert der Player nur {got} s von "
+                f"{expected // 60} Min — das ist nur eine Vorschau; der "
+                "Film ist noch nicht vollständig als VOD freigeschaltet. "
+                "Bitte später erneut versuchen.")
+    except RuntimeError:
+        raise
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def parse_program_id(token):
     """Akzeptiert: URL, 133122-000-A, 133122."""
     m = PROGRAM_RE.search(token)
@@ -231,6 +307,14 @@ def _search_html(query, lang="de"):
 # --------------------------------------------------------------- Info
 def fetch_info_dict(pid):
     """Metadaten per yt-dlp-API (in-process) oder per CLI (-J)."""
+    future = check_availability(pid)
+    if future is not None:
+        raise RuntimeError(
+            f"ARTE: Programm {pid} ist erst ab "
+            f"{future.astimezone().strftime('%d.%m.%Y, %H:%M')} Uhr "
+            "verfügbar — Details/Download bis dahin nicht möglich "
+            "(nur Teaser-Stream).")
+    check_full_stream(pid)
     url = f"https://www.arte.tv/de/videos/{pid}/"
     try:
         ytdlp = get_ytdlp()
@@ -279,11 +363,21 @@ def info(token):
 # --------------------------------------------------------------- Download
 def build_spec(token, out_dir=None, max_height=1080, audio="de",
                subtitles=None, quality="best", test=False,
-               container="mkv"):
+               container="mkv", max_size=None):
     """Baut Format-String, Output-Template und Optionen."""
     pid = parse_program_id(token)
     if not pid:
         sys.exit(f"[!] Keine Programm-ID in {token!r}")
+    future = check_availability(pid)
+    if future is not None:
+        raise RuntimeError(
+            f"ARTE: Programm {pid} ist erst ab "
+            f"{future.astimezone().strftime('%d.%m.%Y, %H:%M')} Uhr "
+            "verfügbar — der Player liefert jetzt nur einen Teaser-Stream "
+            "(kryptischer Postprocessing-Fehler). Download abgebrochen; "
+            "bitte später erneut versuchen.")
+    player_secs = player_stream_seconds(pid)
+    check_full_stream(pid, player_secs)
     url = f"https://www.arte.tv/de/videos/{pid}/"
     out_dir = Path(out_dir or DEFAULT_OUT).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -291,11 +385,20 @@ def build_spec(token, out_dir=None, max_height=1080, audio="de",
 
     h = max_height
     audio_fmt = f"ba[language^={audio}]" if audio else "ba"
+    tbr_cap = ""
+    if max_size:
+        expected = program_duration(pid) or player_secs or 0
+        if expected >= 60:
+            kbps = int(max_size * 8 / 1000 / expected) - 224
+            if kbps > 300:
+                tbr_cap = f"[tbr<={kbps}]"
+    cap = tbr_cap
     if quality == "best":
-        fmt = (f"bv*[height<={h}]+{audio_fmt}/"
-               f"bv*[height<={h}]+ba/b[height<={h}]/b")
+        fmt = (f"bv*[height<={h}]{cap}+{audio_fmt}/"
+               f"bv*[height<={h}]{cap}+ba/b[height<={h}]{cap}/b")
     else:  # klein
-        fmt = f"bv*[height<={h}][vcodec^=avc1]+{audio_fmt}/b[height<={h}]/b"
+        fmt = (f"bv*[height<={h}][vcodec^=avc1]{cap}+{audio_fmt}/"
+               f"b[height<={h}]{cap}/b")
 
     if subtitles == "all":
         sub_langs, convert_srt = ["all"], True
@@ -311,6 +414,7 @@ def build_spec(token, out_dir=None, max_height=1080, audio="de",
         "outtmpl": tpl,
         "mtime": False,
         "noprogress": False,
+        **({"max_filesize": int(max_size)} if max_size else {}),
     }
     pps = [{"key": "FFmpegVideoRemuxer", "preferedformat": container}]
     if sub_langs:

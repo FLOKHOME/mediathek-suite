@@ -40,9 +40,21 @@ ffprobe und ffmpeg sind eingebaut** (kein Python, kein pip).
 2. Treffer markieren → **Details laden**: lesbares Fenster mit Titel,
    Beschreibung, Dauer, Tonspuren, Untertiteln — und der Liste der
    **tatsächlich verfügbaren Auflösungen** (mit Bitrate).
-3. **Auflösung und Format wählen** (MKV/MP4; Auflösung beste
-   vorausgewählt) → **Herunterladen**. Bei MP4 werden Untertitel als
-   mov_text eingebettet, bei MKV als SRT.
+3. **Auflösung, Format (MKV/MP4) und Größenlimit wählen** →
+   **Herunterladen**. Bei MP4 werden Untertitel als mov_text
+   eingebettet, bei MKV als SRT.
+
+**Größenlimit:** Bei ARTE/ORF wird automatisch eine niedrigere
+Qualitätsstufe gewählt, damit die Datei ins Limit passt (bei
+YouTube und den anderen Mediatheken bricht der Download mit einer
+klaren Meldung ab, wenn die Datei größer wäre — dann Auflösung
+senken oder Limit erhöhen).
+
+**ARTE-Vorschau-Falle:** Ist ein Film bei ARTE noch nicht als
+vollständiges VOD freigeschaltet, liefert der Player nur einen
+kurzen Auszug (z. B. 80 s statt 99 Min). Die Suite erkennt das
+anhand der Laufzeiten und bricht mit klarer Meldung ab, statt
+den Auszug als fehlerhafte Datei zu speichern.
    Zielordner oben wählbar (wird gespeichert, Standard:
    `Videos\Mediathek\<Quelle>`), Untertitel automatisch/alle/keine.
 
